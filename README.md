@@ -64,8 +64,9 @@ Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyeleri
 
 ```bash
 # Proje deposunu klonla
-git clone https://github.com/ArdaKaradag/AirSense.git
+git clone https://github.com/ArdaKaradag36/AirSense.git
 cd AirSense
+code .
 
 # Mobil uygulama dizinine gir ve bağımlılıkları yükle
 cd mobile-app
