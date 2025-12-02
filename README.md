@@ -1,5 +1,15 @@
 # AirSense
 
+
+
+
+|:--|:--|:--|![airsense](https://github.com/user-attachments/assets/3f2b2e54-1504-4a90-9374-be9e8dfa9920)
+
+
+
+
+
+
 cat > README.md << 'EOF'
 # 🌬 AirSense – Akıllı Hava Kalitesi İzleme Sistemi
 
@@ -37,7 +47,7 @@ Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyeleri
 ## 👥 Ekip
 
 | Rol | Sorumlu | Açıklama |
-|:--|:--|:--|
+
 | Gömülü Yazılım & PCB Tasarımı | Barış Uygar Kaygusuz | ESP32 sensör entegrasyonu, devre ve kasa tasarımı |
 | Mobil Uygulama Geliştirme | Arda Karadağ | Flutter UI, BLE/Wi-Fi bağlantısı ve veri gösterimi |
 | Backend & API | Arda Karadağ | Node.js/FastAPI servisleri ve veri akışı |
