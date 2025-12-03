@@ -49,8 +49,8 @@ Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyeleri
 | Rol | Sorumlu | Açıklama |
 
 | Gömülü Yazılım & PCB Tasarımı | Barış Uygar Kaygusuz | ESP32 sensör entegrasyonu, devre ve kasa tasarımı |
-| Mobil Uygulama Geliştirme | Arda Karadağ | Flutter UI, BLE/Wi-Fi bağlantısı ve veri gösterimi |
-| Backend & API | Arda Karadağ | Node.js/FastAPI servisleri ve veri akışı |
+| Mobil Uygulama Geliştirme | Arda Karadağ | React Native, BLE/Wi-Fi bağlantısı ve veri gösterimi |
+| Backend & API | Arda Karadağ | FastAPI servisleri ve veri akışı |
 | Test & Kalibrasyon | Barış Uygar Kaygusuz | Sensör doğrulama, kalibrasyon, ölçüm karşılaştırmaları |
 | Dokümantasyon & Proje Yönetimi | Arda Karadağ | GitHub yönetimi, proje takibi, teknik belgeler |
 
@@ -78,9 +78,3 @@ git clone https://github.com/ArdaKaradag36/AirSense.git
 cd AirSense
 code .
 
-# Mobil uygulama dizinine gir ve bağımlılıkları yükle
-cd mobile-app
-flutter pub get
-
-# Gömülü kodları ESP32'ye yüklemek için Arduino IDE'yi aç
-# (hardware/firmware klasöründeki .ino dosyasını kullan)
