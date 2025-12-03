@@ -37,10 +37,10 @@ Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyeleri
 | Donanım | ESP32, SHT31, MH-Z19B, CCS811 |
 | Firmware | Arduino / ESP-IDF |
 | Mobil Uygulama | React Native |
-| Veritabanı | Firebase (Realtime DB) / PostgreSQL (opsiyonel) |
-| Bulut & API | Node.js (Express) veya FastAPI |
+| Veritabanı | Supabase / PostgreSQL |
+| Bulut & API | FastAPI |
 | Tasarım | Figma, Fusion360 |
-| Dokümantasyon | Markdown, PDF, Canva |
+| Dokümantasyon | PDF ve BPMN.io |
 
 ---
 
@@ -61,9 +61,9 @@ Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyeleri
 ### 1️⃣ Gerekli Yazılımlar
 
 - Arduino IDE veya ESP-IDF  
-- Flutter SDK (3.19+)  
-- Node.js (v20+) veya Python 3.12+  
-- Firebase veya PostgreSQL 16+  
+- React Native
+- Python 3.12+  
+- Supabase veya PostgreSQL 16+  
 - Git  
 - Visual Studio Code  
 - Fusion360 (isteğe bağlı, kasa tasarımı için)
