@@ -79,7 +79,7 @@ def get_history(device_serial: str, limit: int = 20):
     try:
         # Belirtilen cihazın son N kaydını çek
         response = supabase.table("sensor_readings")\
-            .select("temperature, humidity, air_quality_status, created_at")\
+            .select("temperature, humidity, mq9_value, air_quality_status, created_at")\
             .eq("device_serial", device_serial)\
             .order("created_at", desc=True)\
             .limit(limit)\
