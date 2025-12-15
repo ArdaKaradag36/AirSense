@@ -81,12 +81,6 @@ git clone https://github.com/ArdaKaradag36/AirSense.git
 cd AirSense
 code .
 
-cd backend
-uvicorn main:app --reload
-cd AirSense
-cd backend
-python test_device.py
-
 
 // MOBİL UYGULAMAYI TEST VERİLERİYLE ÇALIŞTIRMA 15-12-25
 cd backend
