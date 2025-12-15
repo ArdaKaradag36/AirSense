@@ -67,6 +67,9 @@ Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyeleri
 - Git  
 - Visual Studio Code  
 - Fusion360 (isteğe bağlı, kasa tasarımı için)
+- https://nodejs.org/tr/download
+- https://ngrok.com/download/windows?tab=download
+- python -m pip install fastapi uvicorn supabase python-dotenv requests pydantic   // terminale
 
 ---
 
