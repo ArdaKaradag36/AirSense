@@ -93,6 +93,7 @@ cd backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 cd backend
 python test_device.py
+.\ngrok config add-authtoken 36smQfaQt064mTlGxlzZiMNoSsf_5GX5ymtsxac21E3bpCnSF  // ilk defa yeni bilgisayarda açıyorsan yap 
 .\ngrok http 8000     
 cd mobile-app
 npx expo start --tunnel
