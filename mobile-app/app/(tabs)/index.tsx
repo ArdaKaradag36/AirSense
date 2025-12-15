@@ -1,15 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, RefreshControl, Dimensions, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
-import axios from 'axios';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-
-// ✅ ngrok Adresini Buradan Kontrol Et
-const API_URL = 'https://charleigh-roentgenologic-annoyingly.ngrok-free.dev/api/v1/history/AIRSENSE-TEST-001';
+// 👇 MERKEZDEN VERİ ÇEKMEK İÇİN IMPORT
+import { useSensorData } from '../../context/SensorContext';
 
 const screenWidth = Dimensions.get("window").width;
 
-// --- GÜNCELLENMİŞ CANLI RENK PALETİ ---
+// --- RENK PALETİ ---
 const COLORS = {
   GOOD: '#00C853',
   MODERATE: '#FFD600',
@@ -22,62 +20,31 @@ const COLORS = {
 const TIME_RANGES = ['Saatlik', 'Günlük', 'Haftalık', 'Aylık'];
 
 export default function HomeScreen() {
-  const [data, setData] = useState<any[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [firstLoad, setFirstLoad] = useState(true); 
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // ✅ VERİYİ MERKEZDEN ALIYORUZ (Hata yok, senkronizasyon tam)
+  // history: Grafik için liste
+  // data (latest): En son ölçülen anlık veri
+  const { history, data: latest, loading, refreshData } = useSensorData();
   
-  // --- YENİ STATE: Zaman Aralığı Seçimi ---
+  const [refreshing, setRefreshing] = useState(false);
   const [timeRange, setTimeRange] = useState('Saatlik');
   const [isDropdownVisible, setDropdownVisible] = useState(false);
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Veri Çekme Fonksiyonu
-  const fetchData = async (silent = false) => {
-    try {
-      if (!silent) setErrorMsg(null);
-      const response = await axios.get(API_URL);
-
-      if (response.data && response.data.length > 0 && !silent) {
-          // console.log("🔥 Backend Verisi:", response.data[0]);
-      }
-
-      setData(response.data);
-      if (!silent) setFirstLoad(false);
-    } catch (error: any) {
-      console.error("Bağlantı Hatası:", error);
-      if (!silent) {
-        setErrorMsg("Sunucuya bağlanılamadı.");
-        setFirstLoad(false);
-      }
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    intervalRef.current = setInterval(() => {
-      fetchData(true);
-    }, 10000); 
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, []);
-
-  const onRefresh = React.useCallback(() => {
+  // Manuel Yenileme (Aşağı çekince)
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    fetchData().then(() => setRefreshing(false));
-  }, []);
+    await refreshData();
+    setRefreshing(false);
+  }, [refreshData]);
 
+  // Yardımcı: Gaz Değerini Bul
   const findGasValue = (item: any) => {
     if (!item) return 0;
     const val = item.mq9_value || item.mq135_value || item.co2 || item.ppm || item.gas_value;
     return val !== undefined && val !== null ? Number(val) : 0;
   };
 
-  const validData = Array.isArray(data) ? data : [];
-  const latest = validData.length > 0 ? validData[0] : null;
+  // Veri Hazırlığı
+  const validData = Array.isArray(history) ? history : [];
   const currentStatus = latest ? latest.air_quality_status : "UNKNOWN";
   const gasValue = findGasValue(latest);
   const themeColor = getStatusColorFromString(currentStatus);
@@ -118,11 +85,10 @@ export default function HomeScreen() {
     propsForBackgroundLines: { strokeDasharray: "", stroke: "#eee" }, 
   };
 
-  // --- DROPDOWN SEÇİM FONKSİYONU ---
+  // Dropdown Seçim
   const handleSelectRange = (range: string) => {
     setTimeRange(range);
     setDropdownVisible(false);
-    // İleride buraya: fetchData(range) gibi backend isteği eklenebilir.
   };
 
   return (
@@ -138,12 +104,11 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {firstLoad ? (
+        {loading && !latest ? (
           <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.GOOD} /></View>
-        ) : errorMsg ? (
-          <Text style={styles.errorText}>{errorMsg}</Text>
         ) : (
           <>
+            {/* DURUM KARTI */}
             <View style={styles.statusCard}>
               <View style={styles.statusBarsRow}>
                 <View style={[styles.individualStatusBar, { backgroundColor: COLORS.GOOD, opacity: currentStatus === 'GOOD' ? 1 : 0.15 }]} />
@@ -156,12 +121,12 @@ export default function HomeScreen() {
               </Text>
             </View>
 
+            {/* GRAFİK KARTI */}
             <View style={styles.chartCard}>
-              {/* --- YENİ CHART HEADER: DROPDOWN EKLENDİ --- */}
               <View style={styles.chartHeader}>
                 <Text style={styles.chartTitle}>Kalite Trendi</Text>
                 
-                {/* Dropdown Tetikleyici Buton */}
+                {/* Dropdown Buton */}
                 <TouchableOpacity 
                   style={styles.dropdownButton}
                   onPress={() => setDropdownVisible(true)}
@@ -187,6 +152,7 @@ export default function HomeScreen() {
               </View>
             </View>
 
+            {/* DETAY KARTI */}
             {latest && (
               <View style={styles.detailsCard}>
                 <View style={styles.detailRow}>
@@ -239,7 +205,7 @@ export default function HomeScreen() {
                   key={index} 
                   style={[
                     styles.dropdownItem, 
-                    timeRange === range && styles.dropdownItemSelected // Seçili olanı renklendir
+                    timeRange === range && styles.dropdownItemSelected
                   ]}
                   onPress={() => handleSelectRange(range)}
                 >
@@ -296,7 +262,7 @@ const styles = StyleSheet.create({
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   chartTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
   
-  // --- YENİ DROPDOWN STİLLERİ ---
+  // Dropdown Styles
   dropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -312,7 +278,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)', // Arkaplanı hafif karart
+    backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -346,7 +312,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   dropdownItemSelected: {
-    backgroundColor: '#E8F5E9', // Seçili olan hafif yeşil olsun
+    backgroundColor: '#E8F5E9',
   },
   dropdownItemText: {
     fontSize: 16,
