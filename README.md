@@ -95,4 +95,4 @@ cd backend
 python test_device.py
 .\ngrok http 8000     
 cd mobile-app
-npx expo start
+npx expo start --tunnel
