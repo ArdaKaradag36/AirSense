@@ -37,10 +37,10 @@ Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyeleri
 | Donanım | ESP32, SHT31, MH-Z19B, CCS811 |
 | Firmware | Arduino / ESP-IDF |
 | Mobil Uygulama | React Native |
-| Veritabanı | Firebase (Realtime DB) / PostgreSQL (opsiyonel) |
-| Bulut & API | Node.js (Express) veya FastAPI |
+| Veritabanı | Supabase / PostgreSQL |
+| Bulut & API | FastAPI |
 | Tasarım | Figma, Fusion360 |
-| Dokümantasyon | Markdown, PDF, Canva |
+| Dokümantasyon | PDF ve BPMN.io |
 
 ---
 
@@ -49,8 +49,8 @@ Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyeleri
 | Rol | Sorumlu | Açıklama |
 
 | Gömülü Yazılım & PCB Tasarımı | Barış Uygar Kaygusuz | ESP32 sensör entegrasyonu, devre ve kasa tasarımı |
-| Mobil Uygulama Geliştirme | Arda Karadağ | Flutter UI, BLE/Wi-Fi bağlantısı ve veri gösterimi |
-| Backend & API | Arda Karadağ | Node.js/FastAPI servisleri ve veri akışı |
+| Mobil Uygulama Geliştirme | Arda Karadağ | React Native, BLE/Wi-Fi bağlantısı ve veri gösterimi |
+| Backend & API | Arda Karadağ | FastAPI servisleri ve veri akışı |
 | Test & Kalibrasyon | Barış Uygar Kaygusuz | Sensör doğrulama, kalibrasyon, ölçüm karşılaştırmaları |
 | Dokümantasyon & Proje Yönetimi | Arda Karadağ | GitHub yönetimi, proje takibi, teknik belgeler |
 
@@ -61,9 +61,9 @@ Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyeleri
 ### 1️⃣ Gerekli Yazılımlar
 
 - Arduino IDE veya ESP-IDF  
-- Flutter SDK (3.19+)  
-- Node.js (v20+) veya Python 3.12+  
-- Firebase veya PostgreSQL 16+  
+- React Native
+- Python 3.12+  
+- Supabase veya PostgreSQL 16+  
 - Git  
 - Visual Studio Code  
 - Fusion360 (isteğe bağlı, kasa tasarımı için)
@@ -78,9 +78,17 @@ git clone https://github.com/ArdaKaradag36/AirSense.git
 cd AirSense
 code .
 
-# Mobil uygulama dizinine gir ve bağımlılıkları yükle
-cd mobile-app
-flutter pub get
+cd backend
+uvicorn main:app --reload
+cd AirSense
+cd backend
+python test_device.py
 
-# Gömülü kodları ESP32'ye yüklemek için Arduino IDE'yi aç
-# (hardware/firmware klasöründeki .ino dosyasını kullan)
+
+// MOBİL UYGULAMAYI TEST VERİLERİYLE ÇALIŞTIRMA 15-12-25
+cd backend
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+cd backend
+python test_device.py
+cd mobile-app
+npx expo start
