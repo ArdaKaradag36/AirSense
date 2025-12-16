@@ -1,5 +1,5 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -7,9 +7,9 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-// 👇 1. YENİ EKLENEN IMPORT (Veri Merkezi)
 import { SensorProvider } from '../context/SensorContext';
+// 👇 1. Yeni Tema Merkezini çağırıyoruz
+import { ThemeProvider } from '../context/ThemeContext'; 
 
 export {
   ErrorBoundary,
@@ -23,7 +23,6 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    // SpaceMono satırını sildik, sadece ikonları yüklüyoruz:
     ...FontAwesome.font,
   });
 
@@ -48,13 +47,15 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   return (
-    // 👇 2. SARMALAMA İŞLEMİ (Uygulamanın en dışına ekledik)
+    // 👇 2. Sensör ve Tema sağlayıcıları iç içe
     <SensorProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        </Stack>
+      <ThemeProvider> 
+        <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          </Stack>
+        </NavigationThemeProvider>
       </ThemeProvider>
     </SensorProvider>
   );
