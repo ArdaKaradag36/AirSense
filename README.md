@@ -90,3 +90,4 @@ python test_device.py
 .\ngrok http 8000     
 cd mobile-app
 npx expo start --tunnel
+Unutma: Ortağın Barış, ESP32 kodunu yazarken bu belirlediğimiz şifreyi (airsense-2025-secure-key-v1)
