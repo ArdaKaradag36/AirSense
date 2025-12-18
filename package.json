@@ -1,5 +1,9 @@
 {
   "dependencies": {
+    "expo": "^54.0.29",
+    "expo-constants": "~18.0.12",
+    "expo-device": "~8.0.10",
+    "expo-notifications": "~0.32.15",
     "react-native-svg": "^15.12.1"
   }
 }
