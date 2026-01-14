@@ -1,12 +1,14 @@
 // Dosya: mobile-app/app/(tabs)/index.tsx
 
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl, Dimensions, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Image, FlatList } from 'react-native';
+// 👇 Platform EKLENDİ
+import { StyleSheet, Text, View, ScrollView, RefreshControl, Dimensions, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Image, FlatList, Platform } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useSensorData } from '../../context/SensorContext';
 import { useTheme } from '../../context/ThemeContext';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
+import * as Notifications from 'expo-notifications'; // Bildirim kütüphanesi eklendi
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -47,6 +49,33 @@ export default function HomeScreen() {
     await refreshData();
     setRefreshing(false);
   }, [refreshData]);
+
+  // 👇 --- YENİ EKLENEN KISIM: Bildirim Dinleyici ---
+  React.useEffect(() => {
+    // 🛑 WEB KONTROLÜ: Web ise dinleme yapma, yoksa patlar
+    if (Platform.OS === 'web') return;
+
+    // 1. Uygulama açıkken bildirim gelirse yakala
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      const content = notification.request.content;
+      
+      const newNotif = {
+        id: notification.request.identifier,
+        title: content.title || 'Yeni Bildirim',
+        message: content.body || '',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type: 'alert' // Gelen her şeyi şimdilik 'alert' kabul edelim
+      };
+
+      // Listeye en başa ekle
+      setNotifications(prev => [newNotif, ...prev]);
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(notificationListener);
+    };
+  }, []);
+  // 👆 --- BİLDİRİM DİNLEYİCİ SONU ---
 
   const handleSelectRange = (range: string) => {
     setTimeRange(range);

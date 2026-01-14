@@ -67,6 +67,9 @@ export const usePushNotifications = () => {
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>('');
 
   useEffect(() => {
+    // 🛑 WEB KONTROLÜ EKLENDİ: Tarayıcıda token almaya çalışma
+    if (Platform.OS === 'web') return;
+
     registerForPushNotificationsAsync().then(token => {
       setExpoPushToken(token);
 
