@@ -1,4 +1,4 @@
-# AirSense loT
+# AirSense IoT
 
 
 
@@ -11,10 +11,10 @@
 
 
 cat > README.md << 'EOF'
-# 🌬 AirSense loT – Akıllı Hava Kalitesi İzleme Sistemi
+# 🌬 AirSense IoT – Akıllı Hava Kalitesi İzleme Sistemi
 
 🧩 **Proje Tanımı**
-AirSense loT, iç ve dış mekan hava kalitesini ölçen, çevresel verileri gerçek zamanlı olarak izleyen ve mobil uygulama üzerinden kullanıcıya sunan akıllı bir IoT sistemidir.  
+AirSense IoT, iç ve dış mekan hava kalitesini ölçen, çevresel verileri gerçek zamanlı olarak izleyen ve mobil uygulama üzerinden kullanıcıya sunan akıllı bir IoT sistemidir.  
 Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyelerini ölçer ve kullanıcıya sade bir arayüzle aktarır.
 
 ---
