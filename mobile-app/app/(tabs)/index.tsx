@@ -1,10 +1,14 @@
+// Dosya: mobile-app/app/(tabs)/index.tsx
+
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl, Dimensions, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Image } from 'react-native';
+// 👇 Platform EKLENDİ
+import { StyleSheet, Text, View, ScrollView, RefreshControl, Dimensions, ActivityIndicator, TouchableOpacity, Modal, TouchableWithoutFeedback, Image, FlatList, Platform } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useSensorData } from '../../context/SensorContext';
-// 👇 Tema Verisini Çek
 import { useTheme } from '../../context/ThemeContext';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
+import * as Notifications from 'expo-notifications'; // Bildirim kütüphanesi eklendi
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -18,15 +22,27 @@ const COLORS = {
 
 const TIME_RANGES = ['Saatlik', 'Günlük', 'Haftalık', 'Aylık'];
 
+// Örnek Bildirim Verisi (İleride backend'den gerçekleri gelecek)
+const INITIAL_NOTIFICATIONS = [
+  { id: '1', title: '🚨 Gaz Kaçağı Uyarısı!', message: 'Mutfakta yüksek seviye gaz tespit edildi.', time: '10:45', type: 'alert' },
+  { id: '2', title: '✅ Hava Kalitesi Düzeldi', message: 'Ortam değerleri normale döndü.', time: '09:30', type: 'info' },
+  { id: '3', title: 'Sistem Başlatıldı', message: 'AirSense aktif ve izlemeye başladı.', time: 'Dün', type: 'info' },
+];
+
 export default function HomeScreen() {
+  usePushNotifications(); // Token alma işlemi
+
   const { history, data: latest, loading, refreshData } = useSensorData();
-  
-  // ✅ Tema Bağlantısı
   const { isDarkMode, theme } = useTheme();
 
   const [refreshing, setRefreshing] = useState(false);
   const [timeRange, setTimeRange] = useState('Saatlik');
   const [isDropdownVisible, setDropdownVisible] = useState(false);
+  
+  // --- BİLDİRİM STATE'LERİ ---
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const unreadCount = notifications.length;
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -34,6 +50,44 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [refreshData]);
 
+  // 👇 --- YENİ EKLENEN KISIM: Bildirim Dinleyici ---
+  React.useEffect(() => {
+    // 🛑 WEB KONTROLÜ: Web ise dinleme yapma, yoksa patlar
+    if (Platform.OS === 'web') return;
+
+    // 1. Uygulama açıkken bildirim gelirse yakala
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      const content = notification.request.content;
+      
+      const newNotif = {
+        id: notification.request.identifier,
+        title: content.title || 'Yeni Bildirim',
+        message: content.body || '',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type: 'alert' // Gelen her şeyi şimdilik 'alert' kabul edelim
+      };
+
+      // Listeye en başa ekle
+      setNotifications(prev => [newNotif, ...prev]);
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(notificationListener);
+    };
+  }, []);
+  // 👆 --- BİLDİRİM DİNLEYİCİ SONU ---
+
+  const handleSelectRange = (range: string) => {
+    setTimeRange(range);
+    setDropdownVisible(false);
+  };
+
+  const clearNotifications = () => {
+    setNotifications([]);
+    setIsNotifOpen(false);
+  };
+
+  // --- YARDIMCI FONKSİYONLAR ---
   const findGasValue = (item: any) => {
     if (!item) return 0;
     const val = item.mq9_value || item.mq135_value || item.co2 || item.ppm || item.gas_value;
@@ -80,16 +134,15 @@ export default function HomeScreen() {
     propsForBackgroundLines: { strokeDasharray: "", stroke: isDarkMode ? "#333" : "#eee" }, 
   };
 
-  const handleSelectRange = (range: string) => {
-    setTimeRange(range);
-    setDropdownVisible(false);
-  };
-
+  // --- RENDER ---
   return (
     <View style={{flex: 1, backgroundColor: theme.background}}> 
+      
+      {/* ScrollView (İçerik) */}
       <ScrollView 
         style={[styles.container, { backgroundColor: theme.background }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.text} />}
+        scrollEnabled={!isNotifOpen} // Bildirim açıkken arkası kaymasın
       >
         {/* --- HEADER --- */}
         <View style={styles.header}>
@@ -98,23 +151,31 @@ export default function HomeScreen() {
               source={require('../../assets/images/logo.png')}
               style={[
                   styles.headerLogoImage, 
-                  // Logo arka plan ayarı (Karanlık modda beyaz kutucuk)
                   { backgroundColor: theme.logoBackground, borderRadius: theme.logoRadius, padding: theme.logoPadding }
               ]}
               resizeMode="contain" 
             />
             <Text style={[styles.headerTitle, { color: theme.text }]}>AirSense</Text>
           </View>
-          <TouchableOpacity>
-            <Ionicons name="notifications-outline" size={28} color={theme.icon} />
-          </TouchableOpacity>
+          
+          {/* BİLDİRİM BUTONU */}
+          <View>
+            <TouchableOpacity onPress={() => setIsNotifOpen(!isNotifOpen)}>
+              <Ionicons name="notifications-outline" size={28} color={theme.icon} />
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {loading && !latest ? (
           <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.GOOD} /></View>
         ) : (
           <>
-            {/* DURUM KARTI */}
+            {/* STATUS CARD */}
             <View style={[styles.statusCard, { backgroundColor: theme.card }]}>
               <View style={styles.statusBarsRow}>
                 <View style={[styles.individualStatusBar, { backgroundColor: COLORS.GOOD, opacity: currentStatus === 'GOOD' ? 1 : 0.15 }]} />
@@ -127,11 +188,10 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            {/* GRAFİK KARTI */}
+            {/* CHART CARD */}
             <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
               <View style={styles.chartHeader}>
                 <Text style={[styles.chartTitle, { color: theme.text }]}>Kalite Trendi</Text>
-                
                 <TouchableOpacity 
                   style={[styles.dropdownButton, { backgroundColor: isDarkMode ? '#333' : '#F0F0F0' }]}
                   onPress={() => setDropdownVisible(true)}
@@ -140,7 +200,6 @@ export default function HomeScreen() {
                   <Ionicons name="chevron-down" size={14} color={theme.subText} style={{marginLeft: 4}} />
                 </TouchableOpacity>
               </View>
-
               <View style={{ alignItems: 'center', overflow: 'hidden' }}>
                 <LineChart
                   data={lineChartData}
@@ -157,7 +216,7 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* DETAY KARTI */}
+            {/* DETAILS CARD */}
             {latest && (
               <View style={[styles.detailsCard, { backgroundColor: theme.card }]}>
                 <View style={styles.detailRow}>
@@ -194,7 +253,57 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* --- MODAL (DROPDOWN MENÜSÜ) --- */}
+      {/* --- BİLDİRİM DROPDOWN (ABSOLUTE POSITIONED) --- */}
+      {isNotifOpen && (
+        <>
+          {/* Arkaya tıklayınca kapansın diye görünmez bir katman */}
+          <TouchableWithoutFeedback onPress={() => setIsNotifOpen(false)}>
+            <View style={styles.modalOverlayTransparent} />
+          </TouchableWithoutFeedback>
+          
+          <View style={[styles.notificationDropdown, { backgroundColor: theme.card, shadowColor: theme.shadow }]}>
+            <View style={styles.notifHeader}>
+              <Text style={[styles.notifTitle, { color: theme.text }]}>Bildirimler</Text>
+              {notifications.length > 0 && (
+                <TouchableOpacity onPress={clearNotifications}>
+                  <Text style={{color: COLORS.UNHEALTHY, fontSize: 12, fontWeight: '600'}}>Temizle</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            
+            {notifications.length === 0 ? (
+              <View style={{padding: 20, alignItems: 'center'}}>
+                <Ionicons name="notifications-off-outline" size={40} color={theme.subText} />
+                <Text style={{color: theme.subText, marginTop: 10}}>Bildirim yok</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={notifications}
+                keyExtractor={item => item.id}
+                style={{maxHeight: 300}}
+                renderItem={({item}) => (
+                  <View style={[styles.notifItem, { borderBottomColor: theme.border }]}>
+                    <View style={[styles.notifIcon, { backgroundColor: item.type === 'alert' ? '#FFEBEE' : '#E3F2FD' }]}>
+                      <Ionicons 
+                        name={item.type === 'alert' ? "alert-circle" : "information-circle"} 
+                        size={24} 
+                        color={item.type === 'alert' ? COLORS.HAZARDOUS : '#2196F3'} 
+                      />
+                    </View>
+                    <View style={{flex: 1}}>
+                      <Text style={[styles.notifItemTitle, { color: theme.text }]}>{item.title}</Text>
+                      <Text style={[styles.notifItemMsg, { color: theme.subText }]}>{item.message}</Text>
+                      <Text style={styles.notifTime}>{item.time}</Text>
+                    </View>
+                  </View>
+                )}
+              />
+            )}
+          </View>
+        </>
+      )}
+
+      {/* --- TIME RANGE MODAL --- */}
       <Modal
         visible={isDropdownVisible}
         transparent={true}
@@ -233,6 +342,7 @@ export default function HomeScreen() {
   );
 }
 
+// --- HELPERS ---
 const getStatusColorFromString = (status: string | null) => {
     switch (status) {
         case "GOOD": return COLORS.GOOD;
@@ -256,23 +366,27 @@ const getStatusTurkish = (status: string | null) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', height: 300 },
-  
-  // ✅ DÜZELTME BURADA YAPILDI: 
-  // Safety'deki toplam boşluk (20 padding + 60 margin = 80px)
-  // Buradaki toplam boşluk (0 padding + 80 margin = 80px)
-  // Artık milimetrik olarak eşitler.
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginTop: 80, 
-    marginBottom: 20, 
-    paddingHorizontal: 20 
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 80, marginBottom: 20, paddingHorizontal: 20 },
   headerLogoContainer: { flexDirection: 'row', alignItems: 'center' },
   headerLogoImage: { width: 50, height: 50, marginRight: 10 },
   headerTitle: { fontSize: 28, fontWeight: 'bold' },
 
+  // Bildirim Badge
+  badge: { position: 'absolute', top: -5, right: -5, backgroundColor: '#D50000', borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#fff' },
+  badgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
+
+  // Bildirim Dropdown
+  modalOverlayTransparent: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 9 },
+  notificationDropdown: { position: 'absolute', top: 130, right: 20, width: 300, borderRadius: 16, zIndex: 10, elevation: 10, shadowOffset: {width: 0, height: 5}, shadowOpacity: 0.2, shadowRadius: 10 },
+  notifHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  notifTitle: { fontSize: 16, fontWeight: 'bold' },
+  notifItem: { flexDirection: 'row', padding: 15, borderBottomWidth: 1 },
+  notifIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  notifItemTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 2 },
+  notifItemMsg: { fontSize: 12, marginBottom: 4 },
+  notifTime: { fontSize: 10, color: '#999' },
+
+  // Kartlar
   statusCard: { borderRadius: 20, padding: 20, marginBottom: 20, marginHorizontal: 20, alignItems: 'center', shadowColor: "#000", shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
   statusBarsRow: { flexDirection: 'row', height: 16, width: '100%', justifyContent: 'space-between', marginBottom: 15 },
   individualStatusBar: { flex: 1, borderRadius: 8, marginHorizontal: 4 },
@@ -282,19 +396,8 @@ const styles = StyleSheet.create({
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   chartTitle: { fontSize: 18, fontWeight: 'bold' },
   
-  dropdownButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-  },
+  dropdownButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
   dropdownButtonText: { fontSize: 14, fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  dropdownMenu: { width: 250, borderRadius: 16, padding: 10, shadowColor: "#000", shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 10, elevation: 5 },
-  dropdownHeaderTitle: { fontSize: 16, fontWeight: 'bold', color: '#999', marginBottom: 10, textAlign: 'center', paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  dropdownItem: { paddingVertical: 12, paddingHorizontal: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: 10 },
-  dropdownItemText: { fontSize: 16 },
   
   detailsCard: { borderRadius: 20, padding: 20, marginBottom: 30, marginHorizontal: 20, shadowColor: "#000", shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
   detailRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
@@ -302,4 +405,10 @@ const styles = StyleSheet.create({
   detailLabel: { flex: 1, fontSize: 16, marginLeft: 10 },
   detailValue: { fontSize: 18, fontWeight: 'bold' },
   separator: { height: 1, marginLeft: 50 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  dropdownMenu: { width: 250, borderRadius: 16, padding: 10, shadowColor: "#000", shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 10, elevation: 5 },
+  dropdownHeaderTitle: { fontSize: 16, fontWeight: 'bold', color: '#999', marginBottom: 10, textAlign: 'center', paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  dropdownItem: { paddingVertical: 12, paddingHorizontal: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: 10 },
+  dropdownItemText: { fontSize: 16 },
 });

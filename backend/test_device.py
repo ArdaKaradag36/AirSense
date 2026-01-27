@@ -4,13 +4,17 @@ import requests
 import random
 import time
 import json
-from datetime import datetime # <--- EKSİK OLAN BU SATIRDI
+from datetime import datetime
 
 # API Adresi (FastAPI'nin çalıştığı yer)
 API_URL = "http://127.0.0.1:8000/api/v1/data"
 
-# Test cihaz ID'si (Supabase'de kayıtlı olmalı)
+# Test cihaz ID'si
 TEST_DEVICE_SERIAL = "AIRSENSE-TEST-001" 
+
+# --- GÜVENLİK ANAHTARI ---
+# main.py dosyasındaki API_SECRET ile birebir aynı olmalı
+API_KEY = "airsense-2025-secure-key-v1"
 
 def send_test_data():
     """Rastgele verilerle API'ye POST isteği gönderir."""
@@ -25,15 +29,26 @@ def send_test_data():
         "mq9_value": gas_value
     }
 
+    # Header bilgisine API Key'i ekliyoruz
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": API_KEY  # <--- KRİTİK KISIM BURASI
+    }
+
     try:
-        response = requests.post(API_URL, json=packet)
+        # headers parametresini ekleyerek isteği atıyoruz
+        response = requests.post(API_URL, json=packet, headers=headers)
         response.raise_for_status() 
 
         # Başarılı olduğunda saatle birlikte yazdır
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] OK: Gaz Değeri: {packet['mq9_value']} -> Sunucu Cevabı: {response.json().get('message')}")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] OK: Gaz: {packet['mq9_value']} -> Sunucu: {response.json().get('message')}")
         
     except requests.exceptions.HTTPError as errh:
+        # Eğer API Key yanlışsa burada 401 hatası göreceksin
         print(f"HATA (API): {errh}")
+        if response.status_code == 401:
+            print("!!! YETKİSİZ ERİŞİM: API Key yanlış olabilir.")
+            
     except requests.exceptions.ConnectionError as errc:
         print("HATA (Bağlantı): FastAPI sunucusu açık mı? (http://127.0.0.1:8000)")
     except Exception as e:
@@ -41,6 +56,7 @@ def send_test_data():
 
 if __name__ == "__main__":
     print(f"--- Simülasyon Başladı: {TEST_DEVICE_SERIAL} ---")
+    print(f"--- Hedef: {API_URL} ---")
     
     while True:
         send_test_data()

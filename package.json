@@ -1,5 +1,15 @@
 {
   "dependencies": {
-    "react-native-svg": "^15.12.1"
+    "expo": "~54.0.31",
+    "expo-constants": "~18.0.12",
+    "expo-device": "~8.0.10",
+    "expo-notifications": "~0.32.16",
+    "react-dom": "19.1.0",
+    "react-native-svg": "^15.12.1",
+    "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "typescript": "~5.9.2"
   }
 }

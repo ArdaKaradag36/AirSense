@@ -1,4 +1,4 @@
-# AirSense
+# AirSense IoT
 
 
 
@@ -11,10 +11,10 @@
 
 
 cat > README.md << 'EOF'
-# 🌬 AirSense – Akıllı Hava Kalitesi İzleme Sistemi
+# 🌬 AirSense IoT – Akıllı Hava Kalitesi İzleme Sistemi
 
 🧩 **Proje Tanımı**
-AirSense, iç ve dış mekan hava kalitesini ölçen, çevresel verileri gerçek zamanlı olarak izleyen ve mobil uygulama üzerinden kullanıcıya sunan akıllı bir IoT sistemidir.  
+AirSense IoT, iç ve dış mekan hava kalitesini ölçen, çevresel verileri gerçek zamanlı olarak izleyen ve mobil uygulama üzerinden kullanıcıya sunan akıllı bir IoT sistemidir.  
 Proje, sensör verilerini analiz ederek sıcaklık, nem, CO₂ ve VOC seviyelerini ölçer ve kullanıcıya sade bir arayüzle aktarır.
 
 ---
@@ -90,3 +90,17 @@ python test_device.py
 .\ngrok http 8000     
 cd mobile-app
 npx expo start --tunnel
+Unutma: Ortağın Barış, ESP32 kodunu yazarken bu belirlediğimiz şifreyi (airsense-2025-secure-key-v1)
+🔑 1. Backend Güvenlik Şifresi (API Key)
+
+test_device.py ve ileride ESP32 kodunda kullanacağın şifre:
+Plaintext
+
+airsense-2025-secure-key-v1
+
+🆔 2. Expo Project ID (Bildirimler İçin)
+
+Kodun içine gömdüğümüz (hardcode ettiğimiz) ID:
+Plaintext
+
+3127318d-2604-4fea-86d9-07dd167edf63
