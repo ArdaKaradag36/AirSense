@@ -4,34 +4,38 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-// --- KULLANICI AYARLARI (LÜTFEN DOLDUR) ---
-// BURAYA DİKKAT: Evindeki Wi-Fi adını ve şifresini tırnakların içine yazmalısın.
-const char* WIFI_SSID = "TurkTelekom_TA735";      // Örn: Superonline_WiFi
-const char* WIFI_PASS = "ardaanil0636";    // Örn: 12345678
+// --- KULLANICI AYARLARI ---
+const char* WIFI_SSID = "TurkTelekom_TA735";
+const char* WIFI_PASS = "ardaanil0636";
 
-// Bilgisayarının IP Adresi (ipconfig'den aldığımız adres)
-String SERVER_IP = "192.168.1.101"; 
+// Bilgisayarının IP Adresi
+String SERVER_IP = "192.168.1.104"; 
 
 // --- BACKEND GÜVENLİK AYARLARI ---
-const char* API_KEY = "airsense-2025-secure-key-v1"; // Backend'deki şifreyle AYNI
-const char* DEVICE_ID = "ESP32_SALON_01";            // Bu cihazın kimliği
+const char* API_KEY = "airsense-2025-secure-key-v1";
+const char* DEVICE_ID = "ESP32_SALON_01";
 
 // --- DONANIM AYARLARI ---
 #define DHTPIN 4
 #define DHTTYPE DHT11
-#define MQ9_PIN 34
-String SERVER_URL = "http://" + SERVER_IP + ":8000/api/v1/data"; // Backend adresi
+#define MQ9_PIN 34     // MQ-135 burada takılı (Analog Giriş)
+#define BUZZER_PIN 13  // Buzzer Pini (D13)
 
-// Kalibrasyon
+String SERVER_URL = "http://" + SERVER_IP + ":8000/api/v1/data";
+
+// Kalibrasyon ve Alarm Eşiği
 float sicaklik_sapmasi = 5.0; 
-int gaz_esik_degeri = 1200;
+int gaz_esik_degeri = 1200; // Gaz değeri bunu geçerse Buzzer öter!
 
 DHT dht(DHTPIN, DHTTYPE);
 
 void setup() {
   Serial.begin(115200);
   
+  // Donanımları Başlat
   dht.begin();
+  pinMode(BUZZER_PIN, OUTPUT);     // Buzzer çıkış olarak ayarlandı
+  digitalWrite(BUZZER_PIN, LOW);   // Başlangıçta sussun
 
   // Wi-Fi Bağlantısı
   Serial.print("WiFi Baglaniyor: ");
@@ -48,14 +52,15 @@ void setup() {
   if(WiFi.status() == WL_CONNECTED){
     Serial.println("\nWiFi Baglandi! IP: ");
     Serial.println(WiFi.localIP());
+    // Bağlantı başarılı olunca kısa bir "Bip" sesi verelim
+    digitalWrite(BUZZER_PIN, HIGH); delay(100); digitalWrite(BUZZER_PIN, LOW);
   } else {
     Serial.println("\nWiFi Baglantisi Basarisiz! (Isim/Sifre kontrol et)");
   }
 }
 
 void loop() {
-  delay(3000); // 3 saniyede bir veri gönder
-
+  // Sensörleri Oku
   float nem = dht.readHumidity();
   float ham_sicaklik = dht.readTemperature();
   int ham_gaz = analogRead(MQ9_PIN);
@@ -65,15 +70,33 @@ void loop() {
     return;
   }
 
+  // --- ALARM MANTIĞI ---
+  // Eğer gaz değeri eşiği (1200) geçerse alarm çalsın
+  if (ham_gaz > gaz_esik_degeri) {
+    Serial.println("!!! TEHLİKE: YÜKSEK GAZ SEVİYESİ !!!");
+    // Kesik kesik öttür (Bip-Bip-Bip)
+    digitalWrite(BUZZER_PIN, HIGH);
+    delay(100);
+    digitalWrite(BUZZER_PIN, LOW);
+    delay(100);
+    digitalWrite(BUZZER_PIN, HIGH);
+    delay(100);
+    digitalWrite(BUZZER_PIN, LOW);
+  } else {
+    // Değer normalse sus
+    digitalWrite(BUZZER_PIN, LOW);
+  }
+  // ------------------------------------
+
   // Kalibrasyon
   float gercek_sicaklik = ham_sicaklik - sicaklik_sapmasi;
 
-  // --- JSON PAKETLEME (Backend Modeline Uygun) ---
+  // --- JSON PAKETLEME ---
   StaticJsonDocument<200> doc;
-  doc["serial_number"] = DEVICE_ID;     // Backend: serial_number
-  doc["temperature"] = gercek_sicaklik; // Backend: temperature
-  doc["humidity"] = nem;                // Backend: humidity
-  doc["mq9_value"] = ham_gaz;           // Backend: mq9_value (İsim eşleşmeli!)
+  doc["serial_number"] = DEVICE_ID;
+  doc["temperature"] = gercek_sicaklik;
+  doc["humidity"] = nem;
+  doc["mq9_value"] = ham_gaz;
 
   String jsonVerisi;
   serializeJson(doc, jsonVerisi);
@@ -81,11 +104,14 @@ void loop() {
   // --- SERVER'A GÖNDERME ---
   if(WiFi.status() == WL_CONNECTED){
     HTTPClient http;
+    
+    // 🔥 TEK DEĞİŞİKLİK BURASI: Sabır ayarı eklendi (Hata almamak için)
+    http.setTimeout(10000); // 10 Saniye cevap bekle (Timeout hatasını çözer)
+    
     http.begin(SERVER_URL);
     
-    // Header Ayarları
     http.addHeader("Content-Type", "application/json");
-    http.addHeader("x-api-key", API_KEY); // Güvenlik anahtarı
+    http.addHeader("x-api-key", API_KEY);
     
     int httpResponseCode = http.POST(jsonVerisi);
     
@@ -94,14 +120,17 @@ void loop() {
       Serial.print("Gönderildi (Gaz: ");
       Serial.print(ham_gaz);
       Serial.print(") -> Sunucu Cevabı: ");
-      Serial.println(httpResponseCode); // 200 ise başarılı
+      Serial.println(httpResponseCode);
     } else {
       Serial.print("HATA KODU: ");
       Serial.println(httpResponseCode);
     }
     http.end();
   } else {
-    Serial.println("WiFi Kopuk!");
+    Serial.println("WiFi Kopuk! Tekrar bağlanılıyor...");
     WiFi.reconnect();
   }
+  
+  // Döngü gecikmesi
+  delay(2500); 
 }
