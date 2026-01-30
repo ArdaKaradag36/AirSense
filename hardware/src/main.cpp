@@ -18,8 +18,9 @@ const char* DEVICE_ID = "ESP32_SALON_01";
 // --- DONANIM AYARLARI ---
 #define DHTPIN 4
 #define DHTTYPE DHT11
-#define MQ9_PIN 34     // MQ-135 burada takılı (Analog Giriş)
-#define BUZZER_PIN 13  // Buzzer Pini (D13)
+// DÜZELTME 1: Pin ismini güncelledik (Eskisi MQ9_PIN idi)
+#define MQ135_PIN 34     // MQ-135 burada takılı (Analog Giriş)
+#define BUZZER_PIN 13    // Buzzer Pini (D13)
 
 String SERVER_URL = "http://" + SERVER_IP + ":8000/api/v1/data";
 
@@ -63,7 +64,9 @@ void loop() {
   // Sensörleri Oku
   float nem = dht.readHumidity();
   float ham_sicaklik = dht.readTemperature();
-  int ham_gaz = analogRead(MQ9_PIN);
+  
+  // DÜZELTME 2: Okuma yaptığımız değişkenin ve pinin adını düzelttik
+  int ham_gaz = analogRead(MQ135_PIN); 
 
   if (isnan(nem) || isnan(ham_sicaklik)) {
     Serial.println("Sensör Okuma Hatası!");
@@ -73,7 +76,7 @@ void loop() {
   // --- ALARM MANTIĞI ---
   // Eğer gaz değeri eşiği (1200) geçerse alarm çalsın
   if (ham_gaz > gaz_esik_degeri) {
-    Serial.println("!!! TEHLİKE: YÜKSEK GAZ SEVİYESİ !!!");
+    Serial.println("!!! TEHLİKE: YÜKSEK HAVA KİRLİLİĞİ !!!");
     // Kesik kesik öttür (Bip-Bip-Bip)
     digitalWrite(BUZZER_PIN, HIGH);
     delay(100);
@@ -96,7 +99,9 @@ void loop() {
   doc["serial_number"] = DEVICE_ID;
   doc["temperature"] = gercek_sicaklik;
   doc["humidity"] = nem;
-  doc["mq9_value"] = ham_gaz;
+  
+  // DÜZELTME 3 (EN ÖNEMLİSİ): Backend artık bu ismi bekliyor!
+  doc["mq135_value"] = ham_gaz; 
 
   String jsonVerisi;
   serializeJson(doc, jsonVerisi);
@@ -105,8 +110,8 @@ void loop() {
   if(WiFi.status() == WL_CONNECTED){
     HTTPClient http;
     
-    // 🔥 TEK DEĞİŞİKLİK BURASI: Sabır ayarı eklendi (Hata almamak için)
-    http.setTimeout(10000); // 10 Saniye cevap bekle (Timeout hatasını çözer)
+    // Timeout ayarı korundu (-11 hatası almamak için)
+    http.setTimeout(10000); 
     
     http.begin(SERVER_URL);
     
@@ -117,7 +122,7 @@ void loop() {
     
     if(httpResponseCode > 0){
       String response = http.getString();
-      Serial.print("Gönderildi (Gaz: ");
+      Serial.print("Gönderildi (MQ-135: "); // Log yazısını da düzelttik
       Serial.print(ham_gaz);
       Serial.print(") -> Sunucu Cevabı: ");
       Serial.println(httpResponseCode);

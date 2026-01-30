@@ -29,7 +29,7 @@ class SensorData(BaseModel):
     serial_number: str = Field(..., description="ESP32 cihazının benzersiz ID'si.")
     temperature: float = Field(..., ge=-50.0, le=100.0)
     humidity: float = Field(..., ge=0.0, le=100.0)
-    mq9_value: int = Field(..., ge=0, le=4095, description="MQ-9'dan gelen ham analog değer.")
+    mq135_value: int = Field(..., ge=0, le=4095, description="MQ-135'ten gelen ham analog değer.")
 
 class TokenRequest(BaseModel):
     token: str
@@ -38,7 +38,7 @@ class TokenRequest(BaseModel):
 # YARDIMCI FONKSİYONLAR
 # ----------------------------------------------------
 def calculate_status(mq_value: int) -> str:
-    """MQ-9 değerine göre hava kalitesi durumunu belirler."""
+    """MQ-135 değerine göre hava kalitesi durumunu belirler."""
     if mq_value < 600:
         return "GOOD"
     elif mq_value < 1200:
@@ -71,6 +71,7 @@ def send_push_notification(expo_token: str, title: str, body: str):
 # ----------------------------------------------------
 
 # 1. ENDPOINT: Cihazdan Veri Alma (POST)
+# 1. ENDPOINT: Cihazdan Veri Alma (POST)
 @app.post("/api/v1/data")
 def receive_data(data: SensorData, x_api_key: str = Header(None)):
     
@@ -79,14 +80,14 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
         raise HTTPException(status_code=401, detail="Yetkisiz Erişim: Yanlış API Key")
 
     # Veri İşleme
-    status = calculate_status(data.mq9_value)
+    status = calculate_status(data.mq135_value)
     is_alert = status == "HAZARDOUS" # Kırmızı seviye alarm
 
     kayit = {
         "device_serial": data.serial_number,
         "temperature": data.temperature,
         "humidity": data.humidity,
-        "mq9_value": data.mq9_value,
+        "mq135_value": data.mq135_value,
         "air_quality_status": status,
         "is_alert": is_alert
     }
@@ -105,14 +106,18 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
             # 2. Herkese bildirim at
             if users_response.data:
                 for user in users_response.data:
-                    token = user.get("expo_token")
-                    if token:
-                        send_push_notification(
-                            expo_token=token,
-                            title="🚨 GAZ KAÇAĞI UYARISI!",
-                            body=f"Dikkat! Ortamdaki gaz seviyesi tehlikeli sınıra ulaştı. (Değer: {data.mq9_value})"
-                        )
-                        print(f"-> Bildirim gönderildi: {token[:15]}...")
+                    # DÜZELTME: Pylance için tip kontrolü (User sözlük mü?)
+                    if isinstance(user, dict):
+                        token = user.get("expo_token")
+                        
+                        # DÜZELTME: Token gerçekten bir String mi?
+                        if token and isinstance(token, str):
+                            send_push_notification(
+                                expo_token=token,
+                                title="🚨 HAVA KALİTESİ UYARISI!",
+                                body=f"Dikkat! Ortamdaki hava kirliliği tehlikeli sınıra ulaştı. (MQ-135: {data.mq135_value})"
+                            )
+                            print(f"-> Bildirim gönderildi: {token[:15]}...")
 
         return {"status": "success", "message": "Data recorded successfully."}
     
@@ -125,7 +130,7 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
 def get_history(device_serial: str, limit: int = 20):
     try:
         response = supabase.table("sensor_readings")\
-            .select("temperature, humidity, mq9_value, air_quality_status, created_at")\
+            .select("temperature, humidity, mq135_value, air_quality_status, created_at")\
             .eq("device_serial", device_serial)\
             .order("created_at", desc=True)\
             .limit(limit)\
