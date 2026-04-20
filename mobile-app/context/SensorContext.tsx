@@ -10,10 +10,10 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
+import { apiUrl } from "@/constants/api";
 
-// ✅ GÜNCELLEME: Senin Yerel IP Adresin ve Cihaz ID'n
-// Telefonun ve bilgisayarın aynı Wi-Fi'da olmalı!
-const API_URL = "http://172.20.10.3:8000/api/v1/history";
+// Telefon ve backend aynı ağda olmalı; IP: mobile-app/.env içinde EXPO_PUBLIC_API_BASE_URL
+const API_URL = apiUrl("/api/v1/history");
 
 // Veri Tipleri
 interface SensorData {

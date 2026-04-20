@@ -5,6 +5,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { apiUrl } from '@/constants/api';
 
 // Bildirim davranış ayarları
 Notifications.setNotificationHandler({
@@ -17,9 +18,8 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// 👇 BURAYA DİKKAT: Bilgisayarının IP adresi doğru mu? (192.168.1.100 olarak kalmış)
-const REGISTER_URL = "http://172.20.10.3:8000/api/v1/register-token";
-const UNREGISTER_URL = "http://172.20.10.3:8000/api/v1/unregister-token";
+const REGISTER_URL = apiUrl("/api/v1/register-token");
+const UNREGISTER_URL = apiUrl("/api/v1/unregister-token");
 
 async function registerForPushNotificationsAsync() {
   let token;

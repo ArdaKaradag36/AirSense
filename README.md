@@ -1,4 +1,4 @@
-# AirSense IoT
+# AirSense IoT  source venv/bin/activate
 
 
 

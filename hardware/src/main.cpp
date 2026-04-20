@@ -9,7 +9,7 @@ const char* WIFI_SSID = "TurkTelekom_TA735";
 const char* WIFI_PASS = "ardaanil0636";
 
 // Bilgisayarının IP Adresi
-String SERVER_IP = "172.20.10.3"; 
+String SERVER_IP = "172.20.10.3";
 
 // --- BACKEND GÜVENLİK AYARLARI ---
 const char* API_KEY = "airsense-2025-secure-key-v1";

@@ -1,12 +1,15 @@
 # Dosya: AirSense/backend/test_device.py
 
+import os
 import requests
 import random
 import time
 from datetime import datetime
 
-# API Adresi (FastAPI'nin çalıştığı yer)
-API_URL = "http://172.20.10.3:8000/api/v1/data"
+# API Adresi (FastAPI'nin çalıştığı yer); makineye göre: export AIRSENSE_API_URL=...
+API_URL = os.environ.get(
+    "AIRSENSE_API_URL", "http://192.168.1.105:8000/api/v1/data"
+)
 
 # Test cihaz ID'si
 TEST_DEVICE_SERIAL = "AIRSENSE-PRO-001" 
