@@ -3,30 +3,49 @@
 import requests
 import random
 import time
-import json
 from datetime import datetime
 
 # API Adresi (FastAPI'nin çalıştığı yer)
-API_URL = "http://127.0.0.1:8000/api/v1/data"
+API_URL = "http://172.20.10.3:8000/api/v1/data"
 
 # Test cihaz ID'si
-TEST_DEVICE_SERIAL = "AIRSENSE-TEST-001" 
+TEST_DEVICE_SERIAL = "AIRSENSE-PRO-001" 
 
 # --- GÜVENLİK ANAHTARI ---
 # main.py dosyasındaki API_SECRET ile birebir aynı olmalı
 API_KEY = "airsense-2025-secure-key-v1"
 
+state = {
+    "temperature": 24.0,
+    "humidity": 45.0,
+    "co2_ppm": 520,
+    "voc_index": 90,
+}
+
+def random_walk(previous: float, min_value: float, max_value: float, step: float, precision: int = 2):
+    delta = random.choice([-step, 0, step])
+    next_value = previous + delta
+    clamped = max(min_value, min(max_value, next_value))
+    return round(clamped, precision)
+
+def random_walk_int(previous: int, min_value: int, max_value: int, steps: list[int]):
+    delta = random.choice(steps)
+    next_value = previous + delta
+    return max(min_value, min(max_value, next_value))
+
 def send_test_data():
-    """Rastgele verilerle API'ye POST isteği gönderir."""
-    
-    # 300-2500 arası rastgele gaz değeri.
-    gas_value = random.randint(300, 2500) 
-    
+    """Yeni AirSense Pro modeliyle random-walk verileri gonderir."""
+    state["temperature"] = random_walk(state["temperature"], 20.0, 28.0, 0.2)
+    state["humidity"] = random_walk(state["humidity"], 30.0, 60.0, 0.8)
+    state["co2_ppm"] = random_walk_int(state["co2_ppm"], 400, 1200, [-10, -5, 0, 5, 10])
+    state["voc_index"] = random_walk_int(state["voc_index"], 50, 250, [-10, -5, 0, 5, 10])
+
     packet = {
         "serial_number": TEST_DEVICE_SERIAL,
-        "temperature": round(random.uniform(20.0, 30.0), 2),
-        "humidity": round(random.uniform(40.0, 60.0), 2),
-        "mq9_value": gas_value
+        "temperature": state["temperature"],
+        "humidity": state["humidity"],
+        "co2_ppm": state["co2_ppm"],
+        "voc_index": state["voc_index"]
     }
 
     # Header bilgisine API Key'i ekliyoruz
@@ -41,7 +60,11 @@ def send_test_data():
         response.raise_for_status() 
 
         # Başarılı olduğunda saatle birlikte yazdır
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] OK: Gaz: {packet['mq9_value']} -> Sunucu: {response.json().get('message')}")
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] OK: "
+            f"T={state['temperature']}C H={state['humidity']}% CO2={state['co2_ppm']}ppm VOC={state['voc_index']} "
+            f"-> Sunucu: {response.json().get('message')}"
+        )
         
     except requests.exceptions.HTTPError as errh:
         # Eğer API Key yanlışsa burada 401 hatası göreceksin
@@ -50,7 +73,7 @@ def send_test_data():
             print("!!! YETKİSİZ ERİŞİM: API Key yanlış olabilir.")
             
     except requests.exceptions.ConnectionError as errc:
-        print("HATA (Bağlantı): FastAPI sunucusu açık mı? (http://127.0.0.1:8000)")
+        print(f"HATA (Bağlantı): FastAPI sunucusu açık mı? ({API_URL})")
     except Exception as e:
         print(f"Bilinmeyen Hata: {e}")
 
@@ -60,4 +83,4 @@ if __name__ == "__main__":
     
     while True:
         send_test_data()
-        time.sleep(5)
+        time.sleep(10)

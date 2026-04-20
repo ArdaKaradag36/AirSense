@@ -1,36 +1,46 @@
 // Dosya Yolu: mobile-app/context/SensorContext.tsx
 
-import axios from "axios";
 import React, {
   createContext,
   ReactNode,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
+import { Platform } from "react-native";
+import * as Notifications from "expo-notifications";
 
 // ✅ GÜNCELLEME: Senin Yerel IP Adresin ve Cihaz ID'n
 // Telefonun ve bilgisayarın aynı Wi-Fi'da olmalı!
-const API_URL = "http://192.168.1.104:8000/api/v1/history/ESP32_SALON_01";
+const API_URL = "http://172.20.10.3:8000/api/v1/history";
 
 // Veri Tipleri
 interface SensorData {
-  id: number;
+  id?: number;
   temperature: number;
   humidity: number;
-  mq9_value: number; // MQ-9 artık zorunlu geliyor
+  co2_ppm: number;
+  voc_index: number;
   air_quality_status: string;
   created_at: string;
-  // İleride eklenebilecek opsiyonel alanlar
-  mq135_value?: number;
-  co2?: number;
-  ppm?: number;
-  gas_value?: number;
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  received_at: string;
 }
 
 interface SensorContextType {
   data: SensorData | null; // En son veri (Tekil)
   history: SensorData[]; // Geçmiş veriler (Grafik için liste)
+  notifications: AppNotification[];
+  unreadCount: number;
+  phoneNotificationsEnabled: boolean;
+  setPhoneNotificationsEnabled: (enabled: boolean) => void;
+  clearNotifications: () => void;
   loading: boolean;
   refreshData: () => Promise<void>;
 }
@@ -40,19 +50,79 @@ const SensorContext = createContext<SensorContextType | undefined>(undefined);
 export const SensorProvider = ({ children }: { children: ReactNode }) => {
   const [data, setData] = useState<SensorData | null>(null);
   const [history, setHistory] = useState<SensorData[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [phoneNotificationsEnabled, setPhoneNotificationsEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
+  const lastAlertKeyRef = useRef<string>("");
+  const unreadCount = notifications.length;
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+  const addAppNotification = (notification: AppNotification) => {
+    setNotifications((prev) => {
+      const threshold = Date.now() - ONE_WEEK_MS;
+      const fresh = prev.filter((item) => {
+        const t = new Date(item.received_at).getTime();
+        return Number.isFinite(t) && t >= threshold;
+      });
+      return [notification, ...fresh].slice(0, 200);
+    });
+  };
 
   const fetchData = async () => {
     try {
-      const response = await axios.get(API_URL);
+      const response = await fetch(`${API_URL}?serial_number=AIRSENSE-PRO-001`);
+      const data = await response.json();
       // Backend veriyi liste olarak dönüyor
       if (
-        response.data &&
-        Array.isArray(response.data) &&
-        response.data.length > 0
+        data &&
+        Array.isArray(data) &&
+        data.length > 0
       ) {
-        setHistory(response.data); // Listeyi kaydet (Grafikler için)
-        setData(response.data[0]); // En güncel veriyi (ilk eleman) kaydet
+        const mappedHistory: SensorData[] = data.map((item: any) => ({
+          id: item.id,
+          temperature: Number(item.temperature ?? 0),
+          humidity: Number(item.humidity ?? 0),
+          co2_ppm: Number(item.co2_ppm ?? 0),
+          voc_index: Number(item.voc_index ?? 0),
+          air_quality_status: String(item.air_quality_status ?? "UNKNOWN"),
+          created_at: String(item.created_at ?? ""),
+        }));
+
+        setHistory(mappedHistory); // Listeyi kaydet (Grafikler için)
+        setData(mappedHistory[0]); // En güncel veriyi (ilk eleman) kaydet
+
+        const latestReading = mappedHistory[0];
+        const latestStatus = latestReading.air_quality_status;
+        const shouldAlert = latestStatus === "UNHEALTHY" || latestStatus === "HAZARDOUS";
+        if (shouldAlert) {
+          const alertKey = `${latestReading.created_at}-${latestStatus}`;
+          if (lastAlertKeyRef.current !== alertKey) {
+            const alertLabel = latestStatus === "HAZARDOUS" ? "Tehlikeli" : "Sagliksiz";
+            const appNotification: AppNotification = {
+              id: alertKey,
+              title: `Hava Kalitesi ${alertLabel}`,
+              message: `CO2 ${latestReading.co2_ppm} ppm | VOC ${latestReading.voc_index}`,
+              received_at: new Date().toISOString(),
+            };
+            addAppNotification(appNotification);
+
+            if (phoneNotificationsEnabled && Platform.OS !== "web") {
+              try {
+                await Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: appNotification.title,
+                    body: appNotification.message,
+                    sound: "default",
+                  },
+                  trigger: null,
+                });
+              } catch (notifError) {
+                console.error("Telefon bildirimi gönderilemedi:", notifError);
+              }
+            }
+            lastAlertKeyRef.current = alertKey;
+          }
+        }
       }
       setLoading(false);
     } catch (error) {
@@ -65,15 +135,29 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     fetchData();
 
-    // ESP32 3 saniyede bir atıyor, biz de 3 saniyede bir çekelim.
-    const interval: any = setInterval(fetchData, 3000);
+    // Simülatör 10 saniyede bir veri gönderiyor, biz de 10 saniyede bir çekelim.
+    const interval: any = setInterval(fetchData, 10000);
 
     return () => clearInterval(interval);
   }, []);
 
+  const clearNotifications = () => {
+    setNotifications([]);
+  };
+
   return (
     <SensorContext.Provider
-      value={{ data, history, loading, refreshData: fetchData }}
+      value={{
+        data,
+        history,
+        notifications,
+        unreadCount,
+        phoneNotificationsEnabled,
+        setPhoneNotificationsEnabled,
+        clearNotifications,
+        loading,
+        refreshData: fetchData,
+      }}
     >
       {children}
     </SensorContext.Provider>

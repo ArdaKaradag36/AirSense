@@ -1,6 +1,7 @@
 # Dosya: AirSense/backend/main.py
 
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 from datetime import datetime
@@ -8,13 +9,20 @@ import requests # <-- YENİ EKLENDİ: HTTP isteği atmak için
 import os 
 
 app = FastAPI(title="AirSense API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- GÜVENLİK AYARLARI ---
 API_SECRET = "airsense-2025-secure-key-v1" 
 
-# --- GÜNCEL SUPABASE AYARLARIN ---
-SUPABASE_URL = "https://nqmxcxwxeaevndgjyjot.supabase.co"
-SUPABASE_KEY = "sb_publishable_I6JBCwZVMqy32BCyU_hZLA_FMwmboxP"
+# --- GÜNCEL SUPABASE AYARLARI (ENV) ---
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 # Supabase Bağlantısı
 try:
@@ -29,7 +37,8 @@ class SensorData(BaseModel):
     serial_number: str = Field(..., description="ESP32 cihazının benzersiz ID'si.")
     temperature: float = Field(..., ge=-50.0, le=100.0)
     humidity: float = Field(..., ge=0.0, le=100.0)
-    mq135_value: int = Field(..., ge=0, le=4095, description="MQ-135'ten gelen ham analog değer.")
+    co2_ppm: int = Field(..., ge=0, description="SCD40 sensöründen CO2 değeri (ppm).")
+    voc_index: int = Field(..., ge=0, le=500, description="SGP40 sensöründen VOC indeks değeri.")
 
 class TokenRequest(BaseModel):
     token: str
@@ -37,13 +46,13 @@ class TokenRequest(BaseModel):
 # ----------------------------------------------------
 # YARDIMCI FONKSİYONLAR
 # ----------------------------------------------------
-def calculate_status(mq_value: int) -> str:
-    """MQ-135 değerine göre hava kalitesi durumunu belirler."""
-    if mq_value < 600:
+def calculate_status(voc_index: int) -> str:
+    """VOC indeks değerine göre hava kalitesi durumunu belirler."""
+    if voc_index <= 100:
         return "GOOD"
-    elif mq_value < 1200:
+    elif voc_index <= 200:
         return "MODERATE"
-    elif mq_value < 2000:
+    elif voc_index <= 300:
         return "UNHEALTHY"
     else:
         return "HAZARDOUS"
@@ -80,14 +89,15 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
         raise HTTPException(status_code=401, detail="Yetkisiz Erişim: Yanlış API Key")
 
     # Veri İşleme
-    status = calculate_status(data.mq135_value)
+    status = calculate_status(data.voc_index)
     is_alert = status == "HAZARDOUS" # Kırmızı seviye alarm
 
     kayit = {
         "device_serial": data.serial_number,
         "temperature": data.temperature,
         "humidity": data.humidity,
-        "mq135_value": data.mq135_value,
+        "co2_ppm": data.co2_ppm,
+        "voc_index": data.voc_index,
         "air_quality_status": status,
         "is_alert": is_alert
     }
@@ -115,7 +125,7 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
                             send_push_notification(
                                 expo_token=token,
                                 title="🚨 HAVA KALİTESİ UYARISI!",
-                                body=f"Dikkat! Ortamdaki hava kirliliği tehlikeli sınıra ulaştı. (MQ-135: {data.mq135_value})"
+                                body=f"Dikkat! Ortamdaki VOC seviyesi tehlikeli sınıra ulaştı. (VOC Index: {data.voc_index})"
                             )
                             print(f"-> Bildirim gönderildi: {token[:15]}...")
 
@@ -126,12 +136,12 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # 2. ENDPOINT: Mobil Veri Çekme (GET)
-@app.get("/api/v1/history/{device_serial}")
-def get_history(device_serial: str, limit: int = 20):
+@app.get("/api/v1/history")
+def get_history(serial_number: str, limit: int = 20):
     try:
         response = supabase.table("sensor_readings")\
-            .select("temperature, humidity, mq135_value, air_quality_status, created_at")\
-            .eq("device_serial", device_serial)\
+            .select("temperature, humidity, co2_ppm, voc_index, air_quality_status, created_at")\
+            .eq("device_serial", serial_number)\
             .order("created_at", desc=True)\
             .limit(limit)\
             .execute() 
@@ -152,3 +162,13 @@ def register_token(request: TokenRequest):
     except Exception as e:
         print(f"Token Kayıt Hatası: {e}")
         raise HTTPException(status_code=500, detail="Token registration failed.")
+
+# 4. ENDPOINT: Mobil Token Silme
+@app.post("/api/v1/unregister-token")
+def unregister_token(request: TokenRequest):
+    try:
+        supabase.table("mobile_clients").delete().eq("expo_token", request.token).execute()
+        return {"status": "success", "message": "Token removed successfully."}
+    except Exception as e:
+        print(f"Token Silme Hatası: {e}")
+        raise HTTPException(status_code=500, detail="Token removal failed.")

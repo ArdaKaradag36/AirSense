@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Switch, Linking, Alert, Dimensions, Image } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Switch, Linking, Alert, Dimensions } from 'react-native';
 import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 // 👇 Tema Verisini Çek
 import { useTheme } from '../../context/ThemeContext';
+import CustomHeader from '../../components/CustomHeader';
+import { useSensorData } from '../../context/SensorContext';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
 
 const screenWidth = Dimensions.get("window").width;
 
 export default function SafetyScreen() {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [alarmSoundEnabled, setAlarmSoundEnabled] = useState(true);
   const [autoCallEnabled, setAutoCallEnabled] = useState(false);
+  const { phoneNotificationsEnabled, setPhoneNotificationsEnabled } = useSensorData();
+  const { expoPushToken, saveTokenToBackend, removeTokenFromBackend } = usePushNotifications();
 
   // ✅ Tema Kontrolü
   const { isDarkMode, toggleTheme, theme } = useTheme();
@@ -35,37 +39,27 @@ export default function SafetyScreen() {
     </View>
   );
 
+  const handlePhoneNotificationsToggle = async (enabled: boolean) => {
+    setPhoneNotificationsEnabled(enabled);
+    const token = expoPushToken ?? '';
+    if (!token) return;
+
+    if (enabled) {
+      await saveTokenToBackend(token);
+    } else {
+      await removeTokenFromBackend(token);
+    }
+  };
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
-      
-      {/* HEADER - Anchor Ayarı: 60px Margin + 20px Container Padding = 80px (Home ile eşit) */}
-      <View style={styles.header}>
-        <View style={styles.headerLogoContainer}>
-          <Image 
-            source={require('../../assets/images/logo.png')} 
-            style={[
-                styles.headerLogoImage, 
-                // Logo Karanlık modda kaybolmasın diye arkasına beyazlık ekledik
-                { backgroundColor: theme.logoBackground, borderRadius: theme.logoRadius, padding: theme.logoPadding }
-            ]}
-            resizeMode="contain" 
-          />
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Güvenlik</Text>
-        </View>
-        <TouchableOpacity>
-          <Ionicons name="notifications-outline" size={28} color={theme.text} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={{marginBottom: 20}}>
-        <Text style={[styles.pageSubtitle, { color: theme.subText }]}>Prosedürler & Ayarlar</Text>
-      </View>
-
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <CustomHeader />
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
       {/* PANİK BUTONU */}
       <View style={styles.panicSection}>
         <TouchableOpacity style={styles.panicButton} onPress={handleEmergencyCall}>
           <View style={styles.panicIconContainer}>
-            <MaterialCommunityIcons name="phone-alert" size={40} color="#fff" />
+            <MaterialCommunityIcons name="phone-alert" size={50} color="#fff" />
           </View>
           <View>
             <Text style={styles.panicTitle}>112 ACİL ARA</Text>
@@ -132,8 +126,8 @@ export default function SafetyScreen() {
             <Text style={[styles.settingText, { color: theme.text }]}>Anlık Bildirimler</Text>
           </View>
           <Switch 
-            value={notificationsEnabled} 
-            onValueChange={setNotificationsEnabled}
+            value={phoneNotificationsEnabled}
+            onValueChange={handlePhoneNotificationsToggle}
             trackColor={{ false: isDarkMode ? "#555" : "#767577", true: "#4CAF50" }}
           />
         </View>
@@ -178,34 +172,24 @@ export default function SafetyScreen() {
       </TouchableOpacity>
       
       <View style={{height: 50}} /> 
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  
-  // ✅ HEADER: Diğer sayfalardaki (Index: 80px) toplam boşlukla eşitlendi.
-  // 20px padding (container) + 60px margin (header) = 80px
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginTop: 60, 
-    marginBottom: 20 
-  },
-  headerLogoContainer: { flexDirection: 'row', alignItems: 'center' },
-  headerLogoImage: { width: 50, height: 50, marginRight: 10 },
-  headerTitle: { fontSize: 28, fontWeight: 'bold' },
-  pageSubtitle: { fontSize: 16, marginTop: 5 },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
+  content: { paddingHorizontal: 20 },
 
   panicSection: { marginBottom: 30, alignItems: 'center' },
   panicButton: {
     flexDirection: 'row',
     backgroundColor: '#D32F2F',
     width: '100%',
-    padding: 20,
-    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 22,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: "#D32F2F",
@@ -216,12 +200,12 @@ const styles = StyleSheet.create({
   },
   panicIconContainer: {
     backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 10,
+    padding: 12,
     borderRadius: 50,
     marginRight: 15
   },
-  panicTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  panicSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
+  panicTitle: { color: '#fff', fontSize: 30, fontWeight: 'bold' },
+  panicSubtitle: { color: 'rgba(255,255,255,0.9)', fontSize: 16 },
 
   sectionTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, marginTop: 10 },
 

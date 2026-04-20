@@ -18,7 +18,8 @@ Notifications.setNotificationHandler({
 });
 
 // 👇 BURAYA DİKKAT: Bilgisayarının IP adresi doğru mu? (192.168.1.100 olarak kalmış)
-const BACKEND_URL = "http://192.168.1.100:8000/api/v1/register-token"; 
+const REGISTER_URL = "http://172.20.10.3:8000/api/v1/register-token";
+const UNREGISTER_URL = "http://172.20.10.3:8000/api/v1/unregister-token";
 
 async function registerForPushNotificationsAsync() {
   let token;
@@ -73,15 +74,13 @@ export const usePushNotifications = () => {
     registerForPushNotificationsAsync().then(token => {
       setExpoPushToken(token);
 
-      if (token) {
-        saveTokenToBackend(token);
-      }
+      if (token) saveTokenToBackend(token);
     });
   }, []);
 
   const saveTokenToBackend = async (token: string) => {
     try {
-      await fetch(BACKEND_URL, {
+      await fetch(REGISTER_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -96,5 +95,20 @@ export const usePushNotifications = () => {
     }
   };
 
-  return { expoPushToken };
+  const removeTokenFromBackend = async (token: string) => {
+    try {
+      await fetch(UNREGISTER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token }),
+      });
+      console.log("🧹 Token Backend'den silindi.");
+    } catch (error) {
+      console.error("❌ Token Backend'den silinemedi:", error);
+    }
+  };
+
+  return { expoPushToken, saveTokenToBackend, removeTokenFromBackend };
 };
