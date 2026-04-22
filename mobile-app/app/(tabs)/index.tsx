@@ -24,6 +24,7 @@ const TIME_RANGES = ['Canlı', 'Saatlik', 'Günlük'];
 export default function HomeScreen() {
   usePushNotifications(); // Token alma işlemi
 
+  // UI katmani yalnizca Context'ten gelen hazir veriyi kullanir; dogrudan servis/backend cagrisi yapmaz.
   const { history, data: latest, loading, refreshData } = useSensorData();
   const { isDarkMode, theme } = useTheme();
 

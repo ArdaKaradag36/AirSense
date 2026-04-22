@@ -6,14 +6,25 @@ import { useTheme } from '../../context/ThemeContext';
 import CustomHeader from '../../components/CustomHeader';
 import { useSensorData } from '../../context/SensorContext';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
+import { useAuth } from '../../context/AuthContext';
 
 const screenWidth = Dimensions.get("window").width;
 
 export default function SafetyScreen() {
   const [alarmSoundEnabled, setAlarmSoundEnabled] = useState(true);
   const [autoCallEnabled, setAutoCallEnabled] = useState(false);
+  // Safety ekrani servis detaylarini bilmez; Context uzerinden hazir state ve aksiyon alir.
   const { phoneNotificationsEnabled, setPhoneNotificationsEnabled } = useSensorData();
   const { expoPushToken, saveTokenToBackend, removeTokenFromBackend } = usePushNotifications();
+  const { signOut } = useAuth();
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Oturum kapatma hatasi:', error);
+    }
+  };
+
 
   // ✅ Tema Kontrolü
   const { isDarkMode, toggleTheme, theme } = useTheme();
@@ -167,7 +178,7 @@ export default function SafetyScreen() {
 
       </View>
 
-      <TouchableOpacity style={styles.logoutButton}>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
         <Text style={styles.logoutText}>Oturumu Kapat</Text>
       </TouchableOpacity>
       

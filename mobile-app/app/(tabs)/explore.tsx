@@ -9,6 +9,7 @@ import CustomHeader from '../../components/CustomHeader';
 const screenWidth = Dimensions.get("window").width;
 
 export default function AnalysisScreen() {
+  // Explore ekrani da yalnizca Context'ten beslenir; veri kaynagi degisse bu dosya etkilenmez.
   const { data, loading } = useSensorData();
   
   // ✅ Tema Kontrolü

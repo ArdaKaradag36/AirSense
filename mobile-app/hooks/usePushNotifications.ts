@@ -5,7 +5,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { apiUrl } from '@/constants/api';
+import { apiService } from '../services/apiService';
 
 // Bildirim davranış ayarları
 Notifications.setNotificationHandler({
@@ -17,9 +17,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-const REGISTER_URL = apiUrl("/api/v1/register-token");
-const UNREGISTER_URL = apiUrl("/api/v1/unregister-token");
 
 async function registerForPushNotificationsAsync() {
   let token;
@@ -80,15 +77,8 @@ export const usePushNotifications = () => {
 
   const saveTokenToBackend = async (token: string) => {
     try {
-      await fetch(REGISTER_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Backend güvenlik şifresi açıksa burayı aktif et:
-          // 'x-api-key': 'airsense-2025-secure-key-v1'
-        },
-        body: JSON.stringify({ token: token }),
-      });
+      // Bu fonksiyon servis katmanını çağırır; yarın HTTP yerine başka bir protokol gelirse sadece apiService güncellenir.
+      await apiService.registerPushToken(token);
       console.log("✅ Token Backend'e kaydedildi.");
     } catch (error) {
       console.error("❌ Token Backend'e gönderilemedi:", error);
@@ -97,13 +87,8 @@ export const usePushNotifications = () => {
 
   const removeTokenFromBackend = async (token: string) => {
     try {
-      await fetch(UNREGISTER_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token }),
-      });
+      // Ağ erişimini UI/hook içinde tutmuyoruz; gevşek bağlılık için servis katmanına delege ediyoruz.
+      await apiService.unregisterPushToken(token);
       console.log("🧹 Token Backend'den silindi.");
     } catch (error) {
       console.error("❌ Token Backend'den silinemedi:", error);
