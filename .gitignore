@@ -14,3 +14,7 @@ venv/
 backend/.venv/
 .venv/
 venv/
+
+# Environment files
+.env
+mobile-app/.env
