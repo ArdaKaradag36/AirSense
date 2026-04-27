@@ -3,6 +3,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleShee
 import { Link, useRouter } from "expo-router";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
+import { deviceService } from "../../services/deviceService";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -18,7 +19,8 @@ export default function LoginScreen() {
     setErrorText("");
     try {
       await signIn(email.trim(), password);
-      router.replace("/(tabs)");
+      const deviceSerial = await deviceService.getUserDeviceSerial();
+      router.replace(deviceSerial ? "/(tabs)" : "/");
     } catch (error: any) {
       setErrorText(error?.message ?? "Giris yapilirken bir hata olustu.");
     }

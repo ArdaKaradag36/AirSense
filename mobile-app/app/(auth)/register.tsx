@@ -9,6 +9,7 @@ export default function RegisterScreen() {
   const router = useRouter();
   const { theme, isDarkMode } = useTheme();
   const { signUp, loading } = useAuth();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -30,8 +31,8 @@ export default function RegisterScreen() {
   }, [router]);
 
   const isDisabled = useMemo(
-    () => !email || !password || !confirmPassword || loading,
-    [email, password, confirmPassword, loading]
+    () => !fullName || !email || !password || !confirmPassword || loading,
+    [fullName, email, password, confirmPassword, loading]
   );
 
   const handleRegister = async () => {
@@ -42,7 +43,7 @@ export default function RegisterScreen() {
     }
 
     try {
-      await signUp(email.trim(), password);
+      await signUp(email.trim(), password, fullName.trim());
       router.replace("/(tabs)");
     } catch (error: any) {
       setErrorText(error?.message ?? "Kayit sirasinda bir hata olustu.");
@@ -57,6 +58,18 @@ export default function RegisterScreen() {
       <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <Text style={[styles.brand, { color: theme.text }]}>AirSense Pro</Text>
         <Text style={[styles.subtitle, { color: theme.subText }]}>Yeni hesap olustur ve dashboard&apos;a baglan</Text>
+
+        <TextInput
+          style={[
+            styles.input,
+            { backgroundColor: isDarkMode ? "#262626" : "#F4F6F8", color: theme.text, borderColor: theme.border },
+          ]}
+          placeholder="Ad Soyad"
+          placeholderTextColor={theme.subText}
+          value={fullName}
+          autoCapitalize="words"
+          onChangeText={setFullName}
+        />
 
         <TextInput
           style={[

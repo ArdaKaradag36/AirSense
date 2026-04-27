@@ -42,7 +42,7 @@ const memoryStorage = new Map<string, string>();
  * Expo Go veya emulator gecislerinde AsyncStorage native modulu gecici olarak hazir olmayabilir.
  * Bu wrapper, kalici storage hata verirse memory fallback ile auth akisini ayakta tutar.
  */
-const safeStorage = {
+export const safeStorage = {
   async getItem(key: string) {
     try {
       if (AsyncStorage?.getItem) {
@@ -74,6 +74,17 @@ const safeStorage = {
       // no-op: memory fallback
     } finally {
       memoryStorage.delete(key);
+    }
+  },
+  async clearAll() {
+    try {
+      if (AsyncStorage?.clear) {
+        await AsyncStorage.clear();
+      }
+    } catch {
+      // no-op: memory fallback
+    } finally {
+      memoryStorage.clear();
     }
   },
 };

@@ -57,13 +57,14 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchData = async () => {
     try {
-      // Bu çağrı servis katmanında soyutlandığı için Context, protokolden bağımsız kalır.
+      console.log("[SensorContext] fetchData: istek atiliyor...");
       const mappedHistory = await apiService.getHistory({
         serialNumber: "AIRSENSE-PRO-001",
       });
+      console.log("[SensorContext] fetchData: gelen kayit sayisi=", mappedHistory.length);
       if (mappedHistory.length > 0) {
-        setHistory(mappedHistory); // Listeyi kaydet (Grafikler için)
-        setData(mappedHistory[0]); // En güncel veriyi (ilk eleman) kaydet
+        setHistory(mappedHistory);
+        setData(mappedHistory[0]);
 
         const latestReading = mappedHistory[0];
         const latestStatus = latestReading.air_quality_status;
@@ -104,8 +105,7 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
       }
       setLoading(false);
     } catch (error) {
-      console.error("Veri Çekme Hatası:", error);
-      // Hata olsa bile loading'i kapat ki sonsuz döngüde kalmasın
+      console.error("[SensorContext] fetchData HATA:", error);
       setLoading(false);
     }
   };

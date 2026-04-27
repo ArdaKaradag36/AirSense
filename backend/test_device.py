@@ -8,7 +8,7 @@ from datetime import datetime
 
 # API Adresi (FastAPI'nin çalıştığı yer); makineye göre: export AIRSENSE_API_URL=...
 API_URL = os.environ.get(
-    "AIRSENSE_API_URL", "http://192.168.1.105:8000/api/v1/data"
+    "AIRSENSE_API_URL", "http://127.0.0.1:8000/api/v1/data"
 )
 
 # Test cihaz ID'si

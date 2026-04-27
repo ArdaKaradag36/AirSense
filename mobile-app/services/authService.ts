@@ -14,9 +14,17 @@ export const authService = {
     }
   },
 
-  async signUp(email: string, password: string): Promise<{ user: User | null; session: Session | null }> {
+  async signUp(email: string, password: string, fullName?: string): Promise<{ user: User | null; session: Session | null }> {
     this.ensureConfig();
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName?.trim() || "",
+        },
+      },
+    });
     if (error) throw error;
     return data;
   },

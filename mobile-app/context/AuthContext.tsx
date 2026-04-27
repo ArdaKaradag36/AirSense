@@ -1,13 +1,15 @@
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authService } from "../services/authService";
 import { deviceService } from "../services/deviceService";
+import { safeStorage, supabase } from "../services/supabaseClient";
 
 interface AuthContextType {
   loading: boolean;
   user: User | null;
   session: Session | null;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -25,16 +27,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const bootstrap = async () => {
       try {
-        /**
-         * Uygulama ilk acildiginda kalici oturumu kontrol ediyoruz.
-         * Bu adim sayesinde kullanici her acilista tekrar login olmak zorunda kalmaz.
-         */
         const currentSession = await authService.getCurrentSession();
+        console.log("[AuthContext] bootstrap: session=", currentSession?.user?.id ?? "yok");
         if (!isMounted) return;
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
       } catch (error) {
-        console.error("Auth bootstrap hatasi:", error);
+        console.error("[AuthContext] bootstrap hatasi:", error);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -42,20 +41,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     bootstrap();
 
-    /**
-     * Gercek zamanli auth dinleyicisi:
-     * Login/logout/session refresh olaylarinda state'i merkezi olarak gunceller.
-     */
     try {
       const subscription = authService.onAuthStateChange((nextSession) => {
+        console.log("[AuthContext] onAuthStateChange: user=", nextSession?.user?.id ?? "null");
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
         setLoading(false);
       });
       unsubscribe = () => subscription.unsubscribe();
     } catch (error) {
-      // Supabase env henuz tanimli degilse dinleyici kurulmaz; uygulama auth'suz fallback akista acilmaya devam eder.
-      console.warn("Auth listener devre disi:", error);
+      console.warn("[AuthContext] Auth listener devre disi:", error);
     }
 
     return () => {
@@ -69,22 +64,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       loading,
       user,
       session,
-      signUp: async (email, password) => {
+      signUp: async (email, password, fullName) => {
         setLoading(true);
         try {
-          const result = await authService.signUp(email, password);
+          console.log("[AuthContext] signUp: basladi, email=", email);
+          const result = await authService.signUp(email, password, fullName);
+          console.log("[AuthContext] signUp: kullanici olusturuldu, id=", result.user?.id, "| session=", result.session ? "var" : "yok (email onayi gerekebilir)");
 
-          /**
-           * Device-first onboarding:
-           * Kayit basarili olduktan hemen sonra, gecici hafizadaki seri numarasini kullanarak
-           * cihazi yeni olusan kullaniciya zimmetliyoruz.
-           */
           const pendingSerial = await deviceService.getPendingDeviceSerial();
+          console.log("[AuthContext] signUp: pendingSerial=", pendingSerial);
+
           if (!pendingSerial) {
             throw new Error("Kayit icin once cihaz dogrulamasi yapmaniz gerekiyor.");
           }
-          await deviceService.claimDevice(pendingSerial);
+
+          if (!result.user?.id) {
+            throw new Error("Kullanici ID alinamadigi icin cihaz zimmetleme yapilamadi.");
+          }
+          await deviceService.claimDevice(pendingSerial, result.user.id);
+          console.log("[AuthContext] Cihaz Zimmetlendi:", pendingSerial, "->", result.user.id);
           await deviceService.clearPendingDeviceSerial();
+          console.log("[AuthContext] signUp: cihaz zimmetlendi ve pending serial temizlendi");
 
           setSession(result.session);
           setUser(result.user);
@@ -95,7 +95,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signIn: async (email, password) => {
         setLoading(true);
         try {
+          console.log("[AuthContext] signIn: basladi, email=", email);
           const result = await authService.signIn(email, password);
+          console.log("[AuthContext] signIn: basarili, id=", result.user?.id);
           setSession(result.session);
           setUser(result.user);
         } finally {
@@ -105,9 +107,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signOut: async () => {
         setLoading(true);
         try {
-          await authService.signOut();
+          console.log("[AuthContext] Logout Basladi");
+          // Logout'un UI tarafini aninda kapat: kullanici tabs'ta kilitli kalmasin.
           setSession(null);
           setUser(null);
+
+          const cleanupResults = await Promise.allSettled([
+            supabase.auth.signOut(),
+            AsyncStorage.clear(),
+            safeStorage.clearAll(),
+            deviceService.clearPendingDeviceSerial(),
+          ]);
+
+          const [signOutResult] = cleanupResults;
+          if (signOutResult.status === "fulfilled" && signOutResult.value.error) {
+            console.error("[AuthContext] supabase signOut hatasi:", signOutResult.value.error.message);
+          } else if (signOutResult.status === "rejected") {
+            console.error("[AuthContext] supabase signOut rejected:", signOutResult.reason);
+          }
+
+          console.log("[AuthContext] Storage Temizlendi");
+          console.log("[AuthContext] Logout Tamamlandi: session/user sifirlandi");
         } finally {
           setLoading(false);
         }

@@ -1,29 +1,55 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Switch, Linking, Alert, Dimensions } from 'react-native';
 import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
-// 👇 Tema Verisini Çek
+import { useRouter } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import CustomHeader from '../../components/CustomHeader';
 import { useSensorData } from '../../context/SensorContext';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
 import { useAuth } from '../../context/AuthContext';
+import { deviceService } from '../../services/deviceService';
 
 const screenWidth = Dimensions.get("window").width;
 
 export default function SafetyScreen() {
   const [alarmSoundEnabled, setAlarmSoundEnabled] = useState(true);
   const [autoCallEnabled, setAutoCallEnabled] = useState(false);
+  const [deviceSerial, setDeviceSerial] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   // Safety ekrani servis detaylarini bilmez; Context uzerinden hazir state ve aksiyon alir.
   const { phoneNotificationsEnabled, setPhoneNotificationsEnabled } = useSensorData();
   const { expoPushToken, saveTokenToBackend, removeTokenFromBackend } = usePushNotifications();
   const { signOut } = useAuth();
+  const router = useRouter();
+
   const handleSignOut = async () => {
     try {
+      console.log("[Safety] Logout Basladi");
       await signOut();
+      console.log("[Safety] signOut() tamamlandi, zorla '/' ekranina yonlendiriliyor");
+      router.replace("/");
+      setTimeout(() => router.replace("/"), 0);
     } catch (error) {
-      console.error('Oturum kapatma hatasi:', error);
+      console.error("[Safety] handleSignOut hatasi:", error);
     }
   };
+
+  useEffect(() => {
+    const loadUserContext = async () => {
+      try {
+        const [serial, currentUsername] = await Promise.all([
+          deviceService.getUserDeviceSerial(),
+          deviceService.getCurrentUsername(),
+        ]);
+        setDeviceSerial(serial);
+        setUsername(currentUsername);
+      } catch (error) {
+        console.error("[Safety] kullanici/cihaz bilgisi okunamadi:", error);
+      }
+    };
+
+    loadUserContext();
+  }, []);
 
 
   // ✅ Tema Kontrolü
@@ -114,6 +140,34 @@ export default function SafetyScreen() {
       {/* SİSTEM AYARLARI */}
       <Text style={[styles.sectionTitle, { color: theme.text }]}>Sistem Ayarları</Text>
       <View style={[styles.settingsCard, { backgroundColor: theme.card }]}>
+        <View style={styles.settingRow}>
+          <View style={styles.settingLabelContainer}>
+            <Ionicons name="person-circle-outline" size={24} color={theme.subText} />
+            <View>
+              <Text style={[styles.settingText, { color: theme.text }]}>
+                {username ? `Hos geldin, ${username}` : "Hos geldin"}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.separator, { backgroundColor: theme.border }]} />
+
+        <View style={styles.settingRow}>
+          <View style={styles.settingLabelContainer}>
+            <MaterialCommunityIcons name="identifier" size={24} color={theme.subText} />
+            <View>
+              <Text style={[styles.settingText, { color: theme.text }]}>Aktif Cihaz</Text>
+              <Text style={[styles.settingSubText, { color: theme.subText }]}>
+                {deviceSerial
+                  ? `Bu cihazi kullaniyorsun: ${deviceSerial}`
+                  : "Bu hesapta cihaz baglantisi bulunamadi."}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.separator, { backgroundColor: theme.border }]} />
         
         {/* 👇 YENİ EKLENEN KARANLIK MOD BUTONU */}
         <View style={styles.settingRow}>
