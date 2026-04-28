@@ -3,17 +3,12 @@ import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: '#10B981',
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
@@ -21,21 +16,45 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons size={24} name={focused ? 'home' : 'home-outline'} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="advice"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Asistan',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons size={24} name={focused ? 'bulb' : 'bulb-outline'} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="safety"
+        name="stats"
         options={{
-          title: 'Safety',
-          tabBarIcon: ({ color }) => <Ionicons size={24} name="shield-checkmark" color={color} />,
+          title: 'Analiz',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons size={24} name={focused ? 'stats-chart' : 'bar-chart-outline'} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="devices"
+        options={{
+          title: 'Cihazlar',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons size={24} name={focused ? 'hardware-chip' : 'hardware-chip-outline'} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profil',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons size={24} name={focused ? 'person' : 'person-outline'} color={color} />
+          ),
         }}
       />
     </Tabs>

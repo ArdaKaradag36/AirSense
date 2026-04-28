@@ -1,20 +1,26 @@
-node_modules
+node_modules/
 __pycache__/
-
-# Ortam değişkenleri
-.env
-mobile-app/.env
-backend/.env
 *.pyc
+
+# Environment files (keep examples tracked)
+.env
+.env.*
+!.env.example
+mobile-app/.env
+mobile-app/.env.*
+!mobile-app/.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
 # Python virtual env
 backend/.venv/
 .venv/
 venv/
 
-backend/.venv/
-.venv/
-venv/
-
-# Environment files
-.env
-mobile-app/.env
+# Editor / OS / tooling
+.DS_Store
+.vscode/
+.idea/
+.cursor/
+*.log

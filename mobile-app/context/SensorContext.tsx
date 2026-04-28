@@ -28,6 +28,7 @@ interface SensorContextType {
   phoneNotificationsEnabled: boolean;
   setPhoneNotificationsEnabled: (enabled: boolean) => void;
   clearNotifications: () => void;
+  removeNotification: (id: string) => void;
   loading: boolean;
   refreshData: () => Promise<void>;
 }
@@ -124,6 +125,10 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
     setNotifications([]);
   };
 
+  const removeNotification = (id: string) => {
+    setNotifications((prev) => prev.filter((item) => item.id !== id));
+  };
+
   return (
     <SensorContext.Provider
       value={{
@@ -134,6 +139,7 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
         phoneNotificationsEnabled,
         setPhoneNotificationsEnabled,
         clearNotifications,
+        removeNotification,
         loading,
         refreshData: fetchData,
       }}

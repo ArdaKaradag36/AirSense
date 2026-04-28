@@ -25,4 +25,5 @@ export interface Notification {
 export interface SensorHistoryParams {
   serialNumber: string;
   limit?: number;
+  period?: string;
 }

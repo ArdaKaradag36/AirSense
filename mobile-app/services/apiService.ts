@@ -41,6 +41,9 @@ export const apiService = {
     if (params.limit) {
       query.append("limit", String(params.limit));
     }
+    if (params.period) {
+      query.append("period", params.period);
+    }
 
     const response = await fetch(`${HISTORY_URL}?${query.toString()}`);
     if (!response.ok) {

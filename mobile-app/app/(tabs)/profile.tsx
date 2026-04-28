@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Switch, Linking, Alert, Dimensions } from 'react-native';
 import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import CustomHeader from '../../components/CustomHeader';
 import { useSensorData } from '../../context/SensorContext';
@@ -11,26 +10,23 @@ import { deviceService } from '../../services/deviceService';
 
 const screenWidth = Dimensions.get("window").width;
 
-export default function SafetyScreen() {
+export default function ProfileScreen() {
   const [alarmSoundEnabled, setAlarmSoundEnabled] = useState(true);
   const [autoCallEnabled, setAutoCallEnabled] = useState(false);
   const [deviceSerial, setDeviceSerial] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
-  // Safety ekrani servis detaylarini bilmez; Context uzerinden hazir state ve aksiyon alir.
+  // Profil ekrani servis detaylarini bilmez; Context uzerinden hazir state ve aksiyon alir.
   const { phoneNotificationsEnabled, setPhoneNotificationsEnabled } = useSensorData();
   const { expoPushToken, saveTokenToBackend, removeTokenFromBackend } = usePushNotifications();
   const { signOut } = useAuth();
-  const router = useRouter();
 
   const handleSignOut = async () => {
     try {
-      console.log("[Safety] Logout Basladi");
+      console.log("[Profil] Nükleer logout basladi");
       await signOut();
-      console.log("[Safety] signOut() tamamlandi, zorla '/' ekranina yonlendiriliyor");
-      router.replace("/");
-      setTimeout(() => router.replace("/"), 0);
+      console.log("[Profil] signOut() tamamlandi");
     } catch (error) {
-      console.error("[Safety] handleSignOut hatasi:", error);
+      console.error("[Profil] handleSignOut hatasi:", error);
     }
   };
 
@@ -44,7 +40,7 @@ export default function SafetyScreen() {
         setDeviceSerial(serial);
         setUsername(currentUsername);
       } catch (error) {
-        console.error("[Safety] kullanici/cihaz bilgisi okunamadi:", error);
+        console.error("[Profil] kullanici/cihaz bilgisi okunamadi:", error);
       }
     };
 

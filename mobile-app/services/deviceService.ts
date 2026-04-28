@@ -177,4 +177,36 @@ export const deviceService = {
     console.log("[deviceService] getCurrentUsername:", username, "| userId:", user.id);
     return username;
   },
+
+  async updateDeviceLabel(serialNumber: string, newLabel: string | null): Promise<void> {
+    this.ensureConfig();
+    const normalized = serialNumber.trim().toUpperCase();
+    if (!normalized) throw new Error("Gecerli bir cihaz seri numarasi bulunamadi.");
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError) {
+      console.error("[deviceService] updateDeviceLabel getUser hatasi:", userError.message);
+      throw userError;
+    }
+    if (!user) {
+      throw new Error("Cihaz ismini guncellemek icin aktif bir kullanici bulunamadi.");
+    }
+
+    const nextLabel = newLabel && newLabel.trim().length > 0 ? newLabel.trim() : null;
+    const { error } = await supabase
+      .from("devices")
+      .update({ label: nextLabel })
+      .eq("serial_number", normalized)
+      .eq("user_id", user.id);
+
+    if (error) {
+      console.error("[deviceService] updateDeviceLabel update hatasi:", error.message);
+      throw error;
+    }
+
+    console.log("[deviceService] updateDeviceLabel basarili:", normalized, "->", nextLabel ?? "null");
+  },
 };

@@ -1,13 +1,13 @@
 import React from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
+import { FlatList, Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useSensorData } from '../context/SensorContext';
 
 export default function CustomHeader() {
-  const { theme } = useTheme();
-  const { notifications, unreadCount, clearNotifications } = useSensorData();
+  const { theme, isDarkMode } = useTheme();
+  const { notifications, unreadCount, clearNotifications, removeNotification } = useSensorData();
   const [isOpen, setIsOpen] = React.useState(false);
 
   const handleNotificationsPress = () => {
@@ -20,6 +20,14 @@ export default function CustomHeader() {
     const mm = date.getMinutes().toString().padStart(2, '0');
     const dd = date.getDate().toString().padStart(2, '0');
     return `${hh}:${mm} | ${dd}`;
+  };
+
+  const getStatusColor = (message: string) => {
+    const match = message.match(/CO2\s+(\d+)/i);
+    const co2 = match ? Number(match[1]) : 0;
+    if (co2 > 1200) return '#EF4444';
+    if (co2 > 800) return '#F59E0B';
+    return '#10B981';
   };
 
   return (
@@ -42,7 +50,7 @@ export default function CustomHeader() {
             <Text style={[styles.title, { color: theme.text }]}>AirSense</Text>
           </View>
 
-          <Pressable
+          <TouchableOpacity
             onPress={handleNotificationsPress}
             style={styles.iconButton}
             hitSlop={10}
@@ -53,7 +61,7 @@ export default function CustomHeader() {
                 <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
               </View>
             )}
-          </Pressable>
+          </TouchableOpacity>
         </View>
 
       </View>
@@ -62,36 +70,65 @@ export default function CustomHeader() {
         <TouchableWithoutFeedback onPress={() => setIsOpen(false)}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback>
-              <View style={[styles.dropdown, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View
+                style={[
+                  styles.dropdown,
+                  {
+                    backgroundColor: isDarkMode ? 'rgba(28,28,30,0.86)' : 'rgba(255,255,255,0.84)',
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
                 <View style={styles.dropdownHeader}>
                     <View style={styles.dropdownTitleWrap}>
                       <Ionicons name="notifications" size={16} color={theme.icon} />
                       <Text style={[styles.dropdownTitle, { color: theme.text }]}>Bildirimler</Text>
                     </View>
                     <Pressable onPress={clearNotifications} style={styles.clearButton}>
-                      <Text style={styles.clearText}>Temizle</Text>
+                      <Text style={styles.clearText}>Tümünü Temizle</Text>
                     </Pressable>
                 </View>
                 {notifications.length === 0 ? (
                   <View style={styles.emptyState}>
                     <Ionicons name="notifications-off-outline" size={28} color={theme.subText} />
-                    <Text style={[styles.emptyTitle, { color: theme.text }]}>Bildirim yok</Text>
+                    <Text style={[styles.emptyTitle, { color: theme.text }]}>Henüz bir bildiriminiz yok</Text>
                     <Text style={[styles.emptySubtitle, { color: theme.subText }]}>
-                      Yeni uyarilar geldiginde burada listelenecek.
+                      Yeni uyarılar geldiğinde burada listelenecek.
                     </Text>
                   </View>
                 ) : (
-                  <ScrollView style={styles.list} nestedScrollEnabled>
-                    {notifications.map((item) => (
-                      <View key={item.id} style={[styles.notificationItem, { borderBottomColor: theme.border }]}>
-                        <Text style={[styles.notificationTitle, { color: theme.text }]}>{item.title}</Text>
-                        <Text style={[styles.notificationMessage, { color: theme.subText }]}>{item.message}</Text>
-                        <Text style={styles.notificationTime}>
-                          {formatNotificationTime(item.received_at)}
-                        </Text>
+                  <FlatList
+                    data={notifications}
+                    keyExtractor={(item) => item.id}
+                    style={styles.list}
+                    contentContainerStyle={styles.listContent}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                    bounces
+                    onScroll={(event) => {
+                      if (event.nativeEvent.contentOffset.y < -40) {
+                        setIsOpen(false);
+                      }
+                    }}
+                    scrollEventThrottle={16}
+                    renderItem={({ item }) => (
+                      <View style={[styles.notificationItem, { borderBottomColor: theme.border }]}>
+                        <View style={[styles.levelDot, { backgroundColor: getStatusColor(item.message) }]} />
+                        <View style={styles.notificationBody}>
+                          <Text style={[styles.notificationTitle, { color: theme.text }]}>{item.title}</Text>
+                          <Text style={[styles.notificationMessage, { color: theme.subText }]}>{item.message}</Text>
+                          <Text style={styles.notificationTime}>{formatNotificationTime(item.received_at)}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.deleteButton}
+                          onPress={() => removeNotification(item.id)}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                        </TouchableOpacity>
                       </View>
-                    ))}
-                  </ScrollView>
+                    )}
+                  />
                 )}
               </View>
             </TouchableWithoutFeedback>
@@ -201,10 +238,25 @@ const styles = StyleSheet.create({
   list: {
     maxHeight: 285,
   },
+  listContent: {
+    paddingBottom: 6,
+  },
   notificationItem: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 11,
     borderTopWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  levelDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 6,
+    marginRight: 8,
+  },
+  notificationBody: {
+    flex: 1,
   },
   notificationTitle: {
     fontSize: 13.5,
@@ -219,6 +271,10 @@ const styles = StyleSheet.create({
   notificationTime: {
     fontSize: 10,
     color: '#888',
+  },
+  deleteButton: {
+    marginLeft: 8,
+    padding: 4,
   },
   emptyState: {
     paddingHorizontal: 18,

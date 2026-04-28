@@ -237,9 +237,9 @@ const styles = StyleSheet.create({
 
   // Kartlar
   statusCard: { borderRadius: 20, padding: 20, marginBottom: 20, marginHorizontal: 20, alignItems: 'center', shadowColor: "#000", shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
-  statusBarsRow: { flexDirection: 'row', height: 16, width: '100%', justifyContent: 'space-between', marginBottom: 15 },
-  individualStatusBar: { flex: 1, borderRadius: 8, marginHorizontal: 4 },
-  statusText: { fontSize: 22, fontWeight: 'bold', marginTop: 5 },
+  statusBarsRow: { flexDirection: 'row', height: 28, width: '100%', justifyContent: 'space-between', marginBottom: 18 },
+  individualStatusBar: { flex: 1, borderRadius: 11, marginHorizontal: 6 },
+  statusText: { fontSize: 25, fontWeight: 'bold', marginTop: 8 },
   
   chartCard: { borderRadius: 20, padding: 20, marginBottom: 20, marginHorizontal: 20, shadowColor: "#000", shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
