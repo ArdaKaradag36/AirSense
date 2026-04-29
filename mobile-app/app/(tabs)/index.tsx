@@ -2,10 +2,9 @@
 
 import React, { useRef, useState } from 'react';
 // 👇 Platform EKLENDİ
-import { StyleSheet, Text, View, ScrollView, RefreshControl, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, RefreshControl, Dimensions, ActivityIndicator } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useSensorData } from '../../context/SensorContext';
 import { useTheme } from '../../context/ThemeContext';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
@@ -20,18 +19,14 @@ const COLORS = {
   HAZARDOUS: '#D50000',
   UNKNOWN: '#B0BEC5'
 };
-const TIME_RANGES = ['Canlı', 'Saatlik', 'Günlük'];
-
 export default function HomeScreen() {
   usePushNotifications(); // Token alma işlemi
 
   // UI katmani yalnizca Context'ten gelen hazir veriyi kullanir; dogrudan servis/backend cagrisi yapmaz.
   const { history, data: latest, loading, refreshData } = useSensorData();
   const { isDarkMode, theme } = useTheme();
-  const router = useRouter();
 
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedRange, setSelectedRange] = useState('Canlı');
   const chartScrollRef = useRef<ScrollView | null>(null);
 
   const onRefresh = React.useCallback(async () => {
@@ -117,66 +112,32 @@ export default function HomeScreen() {
                 <Text style={[styles.chartTitle, { color: theme.text }]}>Kalite Trendi</Text>
               </View>
               <View style={styles.rangeRow}>
-                {TIME_RANGES.map((range) => (
-                  <TouchableOpacity
-                    key={range}
-                    style={[
-                      styles.rangeButton,
-                      { backgroundColor: isDarkMode ? '#2A2A2A' : '#F0F0F0' },
-                      selectedRange === range && styles.rangeButtonActive,
-                    ]}
-                    onPress={() => {
-                      if (range === 'Saatlik' || range === 'Günlük') {
-                        router.push('/(tabs)/stats');
-                        return;
-                      }
-                      setSelectedRange(range);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.rangeButtonText,
-                        { color: selectedRange === range ? '#FFFFFF' : theme.text },
-                      ]}
-                    >
-                      {range}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {selectedRange === 'Canlı' ? (
-                <>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.chartScrollContent}
-                    ref={chartScrollRef}
-                    onContentSizeChange={() => chartScrollRef.current?.scrollToEnd({ animated: true })}
-                  >
-                    <LineChart
-                      data={lineChartData}
-                      width={dynamicChartWidth}
-                      height={220}
-                      chartConfig={chartConfig}
-                      bezier
-                      withDots={true}
-                      withInnerLines={true}
-                      withOuterLines={false}
-                      withVerticalLines={false}
-                      style={{ marginVertical: 8, borderRadius: 16, paddingRight: 0, marginLeft: -10 }}
-                    />
-                  </ScrollView>
-                  <Text style={[styles.refreshNote, { color: theme.subText }]}>Veri yenileme hızı: 10sn</Text>
-                  <Text style={[styles.lastUpdateNote, { color: theme.subText }]}>Son guncelleme: {lastUpdateText}</Text>
-                </>
-              ) : (
-                <View style={[styles.placeholderCard, { backgroundColor: isDarkMode ? '#252525' : '#F7F9FB' }]}>
-                  <Ionicons name="time-outline" size={24} color={theme.subText} />
-                  <Text style={[styles.placeholderText, { color: theme.subText }]}>
-                    Gecmis Analizi: Donanim Senkronizasyonu Bekleniyor...
-                  </Text>
+                <View style={[styles.rangeButton, styles.rangeButtonActive]}>
+                  <Text style={[styles.rangeButtonText, styles.rangeButtonTextActive]}>Canlı</Text>
                 </View>
-              )}
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chartScrollContent}
+                ref={chartScrollRef}
+                onContentSizeChange={() => chartScrollRef.current?.scrollToEnd({ animated: true })}
+              >
+                <LineChart
+                  data={lineChartData}
+                  width={dynamicChartWidth}
+                  height={220}
+                  chartConfig={chartConfig}
+                  bezier
+                  withDots={true}
+                  withInnerLines={true}
+                  withOuterLines={false}
+                  withVerticalLines={false}
+                  style={{ marginVertical: 8, borderRadius: 16, paddingRight: 0, marginLeft: -10 }}
+                />
+              </ScrollView>
+              <Text style={[styles.refreshNote, { color: theme.subText }]}>Veri yenileme hızı: 10sn</Text>
+              <Text style={[styles.lastUpdateNote, { color: theme.subText }]}>Son guncelleme: {lastUpdateText}</Text>
             </View>
 
             {/* DETAILS CARD */}
@@ -253,14 +214,13 @@ const styles = StyleSheet.create({
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   chartTitle: { fontSize: 18, fontWeight: 'bold' },
   rangeRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  rangeButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
+  rangeButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, alignSelf: 'flex-start' },
   rangeButtonActive: { backgroundColor: '#00C853' },
   rangeButtonText: { fontSize: 13, fontWeight: '600' },
+  rangeButtonTextActive: { color: '#FFFFFF' },
   chartScrollContent: { paddingRight: 10 },
   refreshNote: { marginTop: 6, fontSize: 12, textAlign: 'right' },
   lastUpdateNote: { marginTop: 2, fontSize: 12, textAlign: 'right' },
-  placeholderCard: { borderRadius: 14, minHeight: 140, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
-  placeholderText: { marginTop: 10, textAlign: 'center', fontSize: 14, lineHeight: 20 },
   
   detailsCard: { borderRadius: 20, padding: 20, marginBottom: 30, marginHorizontal: 20, shadowColor: "#000", shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
   detailRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
