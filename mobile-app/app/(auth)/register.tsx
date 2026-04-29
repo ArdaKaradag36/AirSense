@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
 import { deviceService } from "../../services/deviceService";
+import { PASSWORD_MIN_LENGTH, validatePasswordForRegister } from "../../utils/password";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -30,13 +32,25 @@ export default function RegisterScreen() {
     checkPendingDevice();
   }, [router]);
 
+  const passwordChecks = useMemo(() => validatePasswordForRegister(password), [password]);
+
   const isDisabled = useMemo(
-    () => !fullName || !email || !password || !confirmPassword || loading,
-    [fullName, email, password, confirmPassword, loading]
+    () =>
+      !fullName ||
+      !email ||
+      !password ||
+      !confirmPassword ||
+      !passwordChecks.ok ||
+      loading,
+    [fullName, email, password, confirmPassword, passwordChecks.ok, loading]
   );
 
   const handleRegister = async () => {
     setErrorText("");
+    if (!passwordChecks.ok) {
+      setErrorText("Lutfen asagidaki sifre kurallarinin tumunu saglayin.");
+      return;
+    }
     if (password !== confirmPassword) {
       setErrorText("Sifreler eslesmiyor.");
       return;
@@ -45,8 +59,9 @@ export default function RegisterScreen() {
     try {
       await signUp(email.trim(), password, fullName.trim());
       router.replace("/(tabs)");
-    } catch (error: any) {
-      setErrorText(error?.message ?? "Kayit sirasinda bir hata olustu.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Kayit sirasinda bir hata olustu.";
+      setErrorText(message);
     }
   };
 
@@ -94,6 +109,20 @@ export default function RegisterScreen() {
           value={password}
           onChangeText={setPassword}
         />
+
+        <View style={[styles.rulesCard, { backgroundColor: isDarkMode ? "#1A1A1A" : "#F0F4F8", borderColor: theme.border }]}>
+          <Text style={[styles.rulesTitle, { color: theme.text }]}>Sifre gereksinimleri</Text>
+          <RuleRow met={passwordChecks.hasMinLength} theme={theme} text={`En az ${PASSWORD_MIN_LENGTH} karakter`} />
+          <RuleRow met={passwordChecks.hasUpper} theme={theme} text="En az bir buyuk harf (A-Z)" />
+          <RuleRow met={passwordChecks.hasLower} theme={theme} text="En az bir kucuk harf (a-z)" />
+          <RuleRow met={passwordChecks.hasDigit} theme={theme} text="En az bir rakam (0-9)" />
+          <RuleRow
+            met={passwordChecks.hasSpecial}
+            theme={theme}
+            text='En az bir ozel karakter (! @ # $ % & * vb.)'
+          />
+        </View>
+
         <TextInput
           style={[
             styles.input,
@@ -138,6 +167,15 @@ export default function RegisterScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+function RuleRow({ met, theme, text }: { met: boolean; theme: { text: string; subText: string }; text: string }) {
+  return (
+    <View style={styles.ruleRow}>
+      <Ionicons name={met ? "checkmark-circle" : "ellipse-outline"} size={18} color={met ? "#00C853" : theme.subText} />
+      <Text style={[styles.ruleText, { color: met ? theme.text : theme.subText }]}>{text}</Text>
+    </View>
   );
 }
 
@@ -218,5 +256,27 @@ const styles = StyleSheet.create({
     color: "#00C853",
     fontSize: 13,
     fontWeight: "700",
+  },
+  rulesCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    gap: 8,
+  },
+  rulesTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  ruleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  ruleText: {
+    flex: 1,
+    fontSize: 12.5,
+    lineHeight: 18,
   },
 });

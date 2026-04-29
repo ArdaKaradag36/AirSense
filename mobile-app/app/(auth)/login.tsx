@@ -21,8 +21,9 @@ export default function LoginScreen() {
       await signIn(email.trim(), password);
       const deviceSerial = await deviceService.getUserDeviceSerial();
       router.replace(deviceSerial ? "/(tabs)" : "/");
-    } catch (error: any) {
-      setErrorText(error?.message ?? "Giris yapilirken bir hata olustu.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Giris yapilirken bir hata olustu.";
+      setErrorText(message);
     }
   };
 
@@ -60,6 +61,12 @@ export default function LoginScreen() {
         />
 
         {errorText ? <Text style={styles.error}>{errorText}</Text> : null}
+
+        <View style={styles.forgotRow}>
+          <Link href="/(auth)/forgot-password" style={styles.linkText}>
+            Sifremi Unuttum
+          </Link>
+        </View>
 
         <Pressable
           onPress={handleSignIn}
@@ -155,5 +162,9 @@ const styles = StyleSheet.create({
     color: "#00C853",
     fontSize: 13,
     fontWeight: "700",
+  },
+  forgotRow: {
+    alignItems: "flex-end",
+    marginBottom: 8,
   },
 });

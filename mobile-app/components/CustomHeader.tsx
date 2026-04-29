@@ -1,6 +1,6 @@
 import React from 'react';
 import { FlatList, Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useSensorData } from '../context/SensorContext';
@@ -9,6 +9,7 @@ export default function CustomHeader() {
   const { theme, isDarkMode } = useTheme();
   const { notifications, unreadCount, clearNotifications, removeNotification } = useSensorData();
   const [isOpen, setIsOpen] = React.useState(false);
+  const insets = useSafeAreaInsets();
 
   const handleNotificationsPress = () => {
     console.log('Bildirimler açıldı');
@@ -31,7 +32,7 @@ export default function CustomHeader() {
   };
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
+    <View style={[styles.safeArea, { paddingTop: insets.top }]}>
       <View style={styles.wrapper}>
         <View style={styles.container}>
           <View style={styles.leftGroup}>
@@ -135,7 +136,7 @@ export default function CustomHeader() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

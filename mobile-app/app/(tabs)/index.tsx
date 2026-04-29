@@ -5,6 +5,7 @@ import React, { useRef, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, RefreshControl, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useSensorData } from '../../context/SensorContext';
 import { useTheme } from '../../context/ThemeContext';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
@@ -27,6 +28,7 @@ export default function HomeScreen() {
   // UI katmani yalnizca Context'ten gelen hazir veriyi kullanir; dogrudan servis/backend cagrisi yapmaz.
   const { history, data: latest, loading, refreshData } = useSensorData();
   const { isDarkMode, theme } = useTheme();
+  const router = useRouter();
 
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRange, setSelectedRange] = useState('Canlı');
@@ -123,7 +125,13 @@ export default function HomeScreen() {
                       { backgroundColor: isDarkMode ? '#2A2A2A' : '#F0F0F0' },
                       selectedRange === range && styles.rangeButtonActive,
                     ]}
-                    onPress={() => setSelectedRange(range)}
+                    onPress={() => {
+                      if (range === 'Saatlik' || range === 'Günlük') {
+                        router.push('/(tabs)/stats');
+                        return;
+                      }
+                      setSelectedRange(range);
+                    }}
                   >
                     <Text
                       style={[

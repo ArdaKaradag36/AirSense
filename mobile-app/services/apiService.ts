@@ -1,4 +1,19 @@
-import { SensorData, SensorHistoryParams } from "../types/sensor.types";
+import { AirQualityStatus, SensorData, SensorHistoryParams } from "../types/sensor.types";
+
+const VALID_AIR_QUALITY_STATUSES: readonly AirQualityStatus[] = [
+  "GOOD",
+  "MODERATE",
+  "UNHEALTHY",
+  "HAZARDOUS",
+  "UNKNOWN",
+];
+
+const toAirQualityStatus = (value: unknown): AirQualityStatus => {
+  const candidate = String(value ?? "UNKNOWN").toUpperCase();
+  return (VALID_AIR_QUALITY_STATUSES as readonly string[]).includes(candidate)
+    ? (candidate as AirQualityStatus)
+    : "UNKNOWN";
+};
 
 /**
  * Ortam degiskeni notu:
@@ -17,7 +32,7 @@ const mapSensorData = (item: any): SensorData => ({
   humidity: Number(item.humidity ?? 0),
   co2_ppm: Number(item.co2_ppm ?? 0),
   voc_index: Number(item.voc_index ?? 0),
-  air_quality_status: String(item.air_quality_status ?? "UNKNOWN"),
+  air_quality_status: toAirQualityStatus(item.air_quality_status),
   created_at: String(item.created_at ?? ""),
 });
 

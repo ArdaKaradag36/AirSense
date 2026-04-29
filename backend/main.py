@@ -1,12 +1,18 @@
 # Dosya: AirSense/backend/main.py
 
-from fastapi import FastAPI, HTTPException, Header
+from datetime import datetime
+import os
+from typing import Optional
+
+import requests
+from dotenv import load_dotenv
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from supabase import create_client, Client
-from datetime import datetime
-import requests # <-- YENİ EKLENDİ: HTTP isteği atmak için
-import os 
+from supabase import Client, create_client
+
+# backend/ dizininde calistirildiginda .env yuklenir
+load_dotenv()
 
 app = FastAPI(title="AirSense API")
 app.add_middleware(
@@ -20,15 +26,39 @@ app.add_middleware(
 # --- GÜVENLİK AYARLARI ---
 API_SECRET = "airsense-2025-secure-key-v1" 
 
-# --- GÜNCEL SUPABASE AYARLARI (ENV) ---
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+# --- SUPABASE (ENV) ---
+# Dashboard -> Project Settings -> API: Project URL + service_role (secret) key.
+# UYARI: service_role RLS'i bypass eder; sadece sunucuda tut, istemciye verme.
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
-# Supabase Bağlantısı
-try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    print(f"Supabase Bağlantı Hatası: {e}")
+supabase: Optional[Client] = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("Supabase baglantisi basariyla kuruldu.")
+    except Exception as e:
+        print(f"Supabase baglanti hatasi: {e}")
+        supabase = None
+else:
+    print(
+        "Supabase yapilandirmasi eksik: SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY "
+        "ortam degiskenlerini ayarlayin (ornek: backend/.env — bkz. backend/.env.example)."
+    )
+
+
+def require_supabase() -> Client:
+    """Baglanti yoksa 503 dondur; NameError yerine anlasilir hata."""
+    if supabase is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Supabase baglantisi kurulamadi. "
+                "backend/.env dosyasinda SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY "
+                "tanimlayip uvicorn'u yeniden baslatin."
+            ),
+        )
+    return supabase
 
 # ----------------------------------------------------
 # MODELLER
@@ -102,16 +132,17 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
         "is_alert": is_alert
     }
 
+    db = require_supabase()
     try:
         # Veritabanına Yaz
-        supabase.table("sensor_readings").insert(kayit).execute()
-        
+        db.table("sensor_readings").insert(kayit).execute()
+
         # --- KRİTİK BÖLÜM: BİLDİRİM GÖNDERME ---
         if is_alert:
             print(f"!!! ACİL DURUM: {data.serial_number} cihazında seviye HAZARDOUS!")
-            
+
             # 1. Veritabanından kayıtlı telefon tokenlarını çek
-            users_response = supabase.table("mobile_clients").select("expo_token").execute()
+            users_response = db.table("mobile_clients").select("expo_token").execute()
             
             # 2. Herkese bildirim at
             if users_response.data:
@@ -138,8 +169,9 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
 # 2. ENDPOINT: Mobil Veri Çekme (GET)
 @app.get("/api/v1/history")
 def get_history(serial_number: str, limit: int = 20):
+    db = require_supabase()
     try:
-        response = supabase.table("sensor_readings")\
+        response = db.table("sensor_readings")\
             .select("temperature, humidity, co2_ppm, voc_index, air_quality_status, created_at")\
             .eq("device_serial", serial_number)\
             .order("created_at", desc=True)\
@@ -153,8 +185,9 @@ def get_history(serial_number: str, limit: int = 20):
 # 3. ENDPOINT: Mobil Token Kayıt
 @app.post("/api/v1/register-token")
 def register_token(request: TokenRequest):
+    db = require_supabase()
     try:
-        supabase.table("mobile_clients").upsert(
+        db.table("mobile_clients").upsert(
             {"expo_token": request.token}, 
             on_conflict="expo_token"
         ).execute()
@@ -166,8 +199,9 @@ def register_token(request: TokenRequest):
 # 4. ENDPOINT: Mobil Token Silme
 @app.post("/api/v1/unregister-token")
 def unregister_token(request: TokenRequest):
+    db = require_supabase()
     try:
-        supabase.table("mobile_clients").delete().eq("expo_token", request.token).execute()
+        db.table("mobile_clients").delete().eq("expo_token", request.token).execute()
         return {"status": "success", "message": "Token removed successfully."}
     except Exception as e:
         print(f"Token Silme Hatası: {e}")

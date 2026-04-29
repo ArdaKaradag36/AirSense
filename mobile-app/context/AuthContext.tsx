@@ -9,6 +9,14 @@ interface AuthContextType {
   loading: boolean;
   user: User | null;
   session: Session | null;
+  /**
+   * Sifre kurtarma deep link'i ile uygulama acilinca true olur.
+   * Root layout bu flag aktifken navigator'i auth stack'inde tutar ve
+   * reset-password ekranina yonlendirir. Sifre guncellendikten sonra
+   * `clearRecoveryMode` ile kapatilmalidir.
+   */
+  recoveryMode: boolean;
+  clearRecoveryMode: () => void;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -20,6 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -42,10 +51,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     bootstrap();
 
     try {
-      const subscription = authService.onAuthStateChange((nextSession) => {
-        console.log("[AuthContext] onAuthStateChange: user=", nextSession?.user?.id ?? "null");
+      const subscription = authService.onAuthStateChange((nextSession, event) => {
+        console.log("[AuthContext] onAuthStateChange: event=", event, "user=", nextSession?.user?.id ?? "null");
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
+        if (event === "PASSWORD_RECOVERY") {
+          console.log("[AuthContext] PASSWORD_RECOVERY event yakalandi. recoveryMode=true");
+          setRecoveryMode(true);
+        }
         setLoading(false);
       });
       unsubscribe = () => subscription.unsubscribe();
@@ -64,6 +77,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       loading,
       user,
       session,
+      recoveryMode,
+      clearRecoveryMode: () => setRecoveryMode(false),
       signUp: async (email, password, fullName) => {
         setLoading(true);
         try {
@@ -111,6 +126,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // Logout'un UI tarafini aninda kapat: kullanici tabs'ta kilitli kalmasin.
           setSession(null);
           setUser(null);
+          setRecoveryMode(false);
 
           const cleanupResults = await Promise.allSettled([
             supabase.auth.signOut(),
@@ -133,7 +149,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       },
     }),
-    [loading, session, user]
+    [loading, session, user, recoveryMode]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -29,8 +29,9 @@ export default function WelcomeScreen() {
       // Kayit adimina gecene kadar seri numarasini gecici hafizada tutuyoruz.
       await deviceService.savePendingDeviceSerial(normalized);
       router.push("/(auth)/register");
-    } catch (error: any) {
-      setErrorText(error?.message ?? "Cihaz dogrulanirken bir hata olustu.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Cihaz dogrulanirken bir hata olustu.";
+      setErrorText(message);
     } finally {
       setLoading(false);
     }

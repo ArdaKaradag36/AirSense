@@ -1,4 +1,4 @@
-import { Session, User } from "@supabase/supabase-js";
+import { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 
 /**
@@ -56,14 +56,49 @@ export const authService = {
     return data.session ?? null;
   },
 
-  onAuthStateChange(callback: (session: Session | null) => void) {
+  onAuthStateChange(callback: (session: Session | null, event: AuthChangeEvent) => void) {
     this.ensureConfig();
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      callback(session);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      callback(session, event);
     });
 
     return subscription;
+  },
+
+  /**
+   * Sifre sifirlama emaili gonder. `redirectTo` URL'i Supabase Dashboard
+   * Auth -> URL Configuration -> Redirect URLs listesinde de tanimli olmali.
+   */
+  async sendPasswordResetEmail(email: string, redirectTo: string): Promise<void> {
+    this.ensureConfig();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+    if (error) throw error;
+  },
+
+  /**
+   * Aktif (recovery) oturumun sahibi icin yeni parolayi yazar.
+   */
+  async updatePassword(newPassword: string): Promise<void> {
+    this.ensureConfig();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  },
+
+  /**
+   * Recovery deep link'inde URL fragment'inda gelen access/refresh token
+   * ciftini Supabase istemcisine iletir; bu cagri PASSWORD_RECOVERY event'ini
+   * tetikler ve `auth.updateUser({ password })` cagrisini mumkun kilar.
+   */
+  async setRecoverySession(accessToken: string, refreshToken: string): Promise<void> {
+    this.ensureConfig();
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (error) throw error;
   },
 };

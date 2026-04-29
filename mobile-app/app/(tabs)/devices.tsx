@@ -45,31 +45,6 @@ export default function DevicesScreen() {
 
   const hasDevices = useMemo(() => devices.length > 0, [devices]);
 
-  const resolveDeviceStatus = async (serialNumber: string): Promise<{ status: 'online' | 'offline'; lastSeenAt: string | null }> => {
-    const { data, error } = await supabase
-      .from('sensor_readings')
-      .select('created_at')
-      .eq('device_serial', serialNumber)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !data?.created_at) {
-      return { status: 'offline', lastSeenAt: null };
-    }
-
-    const createdAt = new Date(data.created_at).getTime();
-    if (Number.isNaN(createdAt)) {
-      return { status: 'offline', lastSeenAt: data.created_at };
-    }
-
-    const isOnline = Date.now() - createdAt <= ONLINE_THRESHOLD_MS;
-    return {
-      status: isOnline ? 'online' : 'offline',
-      lastSeenAt: data.created_at,
-    };
-  };
-
   const loadDevices = useCallback(async (silent = false) => {
     const shouldBlockUI = !silent && !hasInitialLoadCompleted.current;
 
@@ -96,18 +71,38 @@ export default function DevicesScreen() {
       if (error) throw error;
 
       const normalized = (data ?? []) as { id: number; serial_number: string; label: string | null }[];
-      const withStatus = await Promise.all(
-        normalized.map(async (item) => {
-          const statusInfo = await resolveDeviceStatus(item.serial_number);
-          return {
-            id: item.id,
-            serial_number: item.serial_number,
-            label: item.label,
-            status: statusInfo.status,
-            lastSeenAt: statusInfo.lastSeenAt,
-          } as DeviceRow;
-        })
-      );
+      const serials = normalized.map((item) => item.serial_number);
+
+      const latestMap = new Map<string, string>();
+      if (serials.length > 0) {
+        const { data: readings, error: readingsError } = await supabase
+          .from('sensor_readings')
+          .select('device_serial, created_at')
+          .in('device_serial', serials)
+          .order('created_at', { ascending: false })
+          .limit(1000);
+
+        if (readingsError) throw readingsError;
+
+        for (const row of readings ?? []) {
+          if (!latestMap.has(row.device_serial)) {
+            latestMap.set(row.device_serial, row.created_at);
+          }
+        }
+      }
+
+      const withStatus: DeviceRow[] = normalized.map((item) => {
+        const lastSeenAt = latestMap.get(item.serial_number) ?? null;
+        const ts = lastSeenAt ? new Date(lastSeenAt).getTime() : NaN;
+        const isOnline = !Number.isNaN(ts) && Date.now() - ts <= ONLINE_THRESHOLD_MS;
+        return {
+          id: item.id,
+          serial_number: item.serial_number,
+          label: item.label,
+          status: isOnline ? 'online' : 'offline',
+          lastSeenAt,
+        };
+      });
 
       setDevices(withStatus);
     } catch (error) {

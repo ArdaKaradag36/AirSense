@@ -11,6 +11,7 @@ import React, {
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import { apiService } from "../services/apiService";
+import { deviceService } from "../services/deviceService";
 import { Notification, SensorData } from "../types/sensor.types";
 
 /**
@@ -59,8 +60,16 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
   const fetchData = async () => {
     try {
       console.log("[SensorContext] fetchData: istek atiliyor...");
+      const serial = await deviceService.getUserDeviceSerial();
+      if (!serial) {
+        console.log("[SensorContext] fetchData: aktif kullanici/cihaz bulunamadi, fetch iptal edildi.");
+        setHistory([]);
+        setData(null);
+        setLoading(false);
+        return;
+      }
       const mappedHistory = await apiService.getHistory({
-        serialNumber: "AIRSENSE-PRO-001",
+        serialNumber: serial,
       });
       console.log("[SensorContext] fetchData: gelen kayit sayisi=", mappedHistory.length);
       if (mappedHistory.length > 0) {

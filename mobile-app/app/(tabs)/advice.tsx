@@ -93,7 +93,7 @@ export default function AnalysisScreen() {
                 <MaterialCommunityIcons name="molecule-co2" size={24} color="#D32F2F" />
               </View>
               <Text style={[styles.molValue, { color: theme.text }]}>{co2}</Text>
-              <Text style={styles.molLabel}>PPM</Text>
+              <Text style={[styles.molLabel, { color: theme.subText }]}>PPM</Text>
             </View>
 
             <View style={[styles.moleculeCard, { backgroundColor: theme.card }]}>
@@ -101,7 +101,7 @@ export default function AnalysisScreen() {
                 <MaterialCommunityIcons name="air-filter" size={22} color="#455A64" />
               </View>
               <Text style={[styles.molValue, { color: theme.text }]}>{vocIndex}</Text>
-              <Text style={styles.molLabel}>VOC Index</Text>
+              <Text style={[styles.molLabel, { color: theme.subText }]}>VOC Index</Text>
             </View>
 
             <View style={[styles.moleculeCard, { backgroundColor: theme.card }]}>
@@ -109,7 +109,7 @@ export default function AnalysisScreen() {
                 <Ionicons name="water" size={24} color="#1976D2" />
               </View>
               <Text style={[styles.molValue, { color: theme.text }]}>%{humidity}</Text>
-              <Text style={styles.molLabel}>Nem Oranı</Text>
+              <Text style={[styles.molLabel, { color: theme.subText }]}>Nem Oranı</Text>
             </View>
 
             <View style={[styles.moleculeCard, { backgroundColor: theme.card }]}>
@@ -117,7 +117,7 @@ export default function AnalysisScreen() {
                 <FontAwesome5 name="temperature-high" size={20} color="#E65100" />
               </View>
               <Text style={[styles.molValue, { color: theme.text }]}>{temp}°C</Text>
-              <Text style={styles.molLabel}>Sıcaklık</Text>
+              <Text style={[styles.molLabel, { color: theme.subText }]}>Sıcaklık</Text>
             </View>
           </View>
 
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   },
   iconBox: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   molValue: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
-  molLabel: { fontSize: 13, color: '#888' },
+  molLabel: { fontSize: 13 },
 
   recommendationSection: { marginTop: 10, marginBottom: 40 },
   actionCard: { flexDirection: 'row', borderRadius: 16, padding: 15, marginBottom: 12, alignItems: 'center', shadowColor: "#000", shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
