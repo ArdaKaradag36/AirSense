@@ -7,6 +7,7 @@ import CustomHeader from '../../components/CustomHeader';
 import { apiService } from '../../services/apiService';
 import { deviceService } from '../../services/deviceService';
 import { SensorData } from '../../types/sensor.types';
+import { mapCo2SeriesToQualityScores } from '../../utils/co2QualityChart';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -101,16 +102,17 @@ export default function StatsScreen() {
     return history.map((item, index) => (index % every === 0 ? formatTimeLabel(item.created_at, period) : ''));
   }, [history, period]);
 
-  const co2Values = useMemo(
+  const co2ValuesRaw = useMemo(
     () => (history.length > 0 ? history.map((item) => Number(item.co2_ppm ?? 0)) : [0]),
     [history]
   );
+  const co2ChartScores = useMemo(() => mapCo2SeriesToQualityScores(co2ValuesRaw), [co2ValuesRaw]);
   const tempValues = useMemo(
     () => (history.length > 0 ? history.map((item) => Number(item.temperature ?? 0)) : [0]),
     [history]
   );
 
-  const maxCo2 = useMemo(() => (co2Values.length > 0 ? Math.max(...co2Values) : 0), [co2Values]);
+  const maxCo2 = useMemo(() => (co2ValuesRaw.length > 0 ? Math.max(...co2ValuesRaw) : 0), [co2ValuesRaw]);
   const avgTemp = useMemo(() => {
     if (tempValues.length === 0) return 0;
     const total = tempValues.reduce((sum, value) => sum + value, 0);
@@ -139,10 +141,14 @@ export default function StatsScreen() {
     },
   };
 
-  const handleDataPointClick = (metric: MetricKey, index: number, value: number) => {
+  const handleDataPointClick = (metric: MetricKey, index: number, chartYValue: number) => {
     const source = history[index];
     const timeText = source ? formatTooltipTime(source.created_at) : '--';
-    const valueText = metric === 'co2_ppm' ? `${Math.round(value)} ppm` : `${value.toFixed(1)} °C`;
+    const rawCo2 = source ? Number(source.co2_ppm ?? 0) : 0;
+    const valueText =
+      metric === 'co2_ppm'
+        ? `${Math.round(rawCo2)} ppm (kalite ${Math.round(chartYValue)} / 100)`
+        : `${chartYValue.toFixed(1)} °C`;
     const text = `${timeText} • ${valueText}`;
     if (metric === 'co2_ppm') setCo2Tooltip(text);
     if (metric === 'temperature') setTempTooltip(text);
@@ -190,17 +196,20 @@ export default function StatsScreen() {
             {!errorText ? (
               <>
                 <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
-                  <Text style={[styles.chartTitle, { color: theme.text }]}>CO2 Grafigi</Text>
+                  <Text style={[styles.chartTitle, { color: theme.text }]}>Hava kalitesi (CO2)</Text>
+                  <Text style={[styles.chartSubtitle, { color: theme.subText }]}>
+                    Yuksek cizgi = daha iyi hava (0-100 skor)
+                  </Text>
                   <Text style={[styles.tooltipText, { color: theme.subText }]}>{co2Tooltip}</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <LineChart
                       data={{
                         labels: sparseLabels,
-                        datasets: [{ data: co2Values }],
+                        datasets: [{ data: co2ChartScores }],
                       }}
                       width={chartWidth}
                       height={220}
-                      yAxisSuffix=" ppm"
+                      yAxisSuffix=""
                       withInnerLines
                       withOuterLines={false}
                       withShadow
@@ -335,6 +344,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   chartTitle: { fontSize: 17, fontWeight: '700', paddingHorizontal: 14, marginBottom: 4 },
+  chartSubtitle: { fontSize: 12, paddingHorizontal: 14, marginBottom: 6, lineHeight: 16 },
   tooltipText: { fontSize: 12, paddingHorizontal: 14, marginBottom: 8 },
   chart: { borderRadius: 16 },
 

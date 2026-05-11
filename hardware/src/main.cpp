@@ -4,43 +4,38 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-// --- KULLANICI AYARLARI ---
-const char* WIFI_SSID = "TurkTelekom_TA735";
-const char* WIFI_PASS = "ardaanil0636";
-
-// Bilgisayarının IP Adresi
-String SERVER_IP = "172.20.10.3";
-
-// --- BACKEND GÜVENLİK AYARLARI ---
-const char* API_KEY = "airsense-2025-secure-key-v1";
-const char* DEVICE_ID = "ESP32_SALON_01";
+// Kimlik bilgileri secrets.h'tan gelir — bu dosya .gitignore'dadır.
+// Kopya: hardware/src/secrets.h.example -> hardware/src/secrets.h
+#include "secrets.h"
 
 // --- DONANIM AYARLARI ---
-#define DHTPIN 4
-#define DHTTYPE DHT11
-// DÜZELTME 1: Pin ismini güncelledik (Eskisi MQ9_PIN idi)
-#define MQ135_PIN 34     // MQ-135 burada takılı (Analog Giriş)
-#define BUZZER_PIN 13    // Buzzer Pini (D13)
+#define DHTPIN      4
+#define DHTTYPE     DHT11
+#define MQ135_PIN   34
+#define BUZZER_PIN  13
 
-String SERVER_URL = "http://" + SERVER_IP + ":8000/api/v1/data";
+// --- KALIBRASYON ---
+constexpr float SICAKLIK_SAPMASI = 5.0f;
+constexpr int   GAZ_ESIK         = 1200;
 
-// Kalibrasyon ve Alarm Eşiği
-float sicaklik_sapmasi = 5.0; 
-int gaz_esik_degeri = 1200; // Gaz değeri bunu geçerse Buzzer öter!
+// --- ZAMANLAMA (non-blocking) ---
+constexpr unsigned long OLCUM_ARALIK_MS  = 10000UL;  // 10 sn — delay() kullanilmiyor
+constexpr unsigned long WIFI_RETRY_MS    = 30000UL;  // 30 sn sonra yeniden bag. denemesi
+constexpr unsigned long HTTP_TIMEOUT_MS  = 8000UL;
 
+// --- GLOBAL DURUM ---
 DHT dht(DHTPIN, DHTTYPE);
+String serverUrl;
 
-void setup() {
-  Serial.begin(115200);
-  
-  // Donanımları Başlat
-  dht.begin();
-  pinMode(BUZZER_PIN, OUTPUT);     // Buzzer çıkış olarak ayarlandı
-  digitalWrite(BUZZER_PIN, LOW);   // Başlangıçta sussun
+unsigned long sonOlcumZamani  = 0;
+unsigned long sonWifiDenemesi = 0;
+bool buzzerAktif              = false;
 
-  // Wi-Fi Bağlantısı
-  Serial.print("WiFi Baglaniyor: ");
-  Serial.println(WIFI_SSID);
+// -------------------------------------------------------
+// YARDIMCI: Wi-Fi baglantisini kur (blocking yalnizca setup'ta)
+// -------------------------------------------------------
+void wifiBaglan() {
+  Serial.printf("WiFi Baglaniyor: %s\n", WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   int deneme = 0;
@@ -49,93 +44,109 @@ void setup() {
     Serial.print(".");
     deneme++;
   }
-  
-  if(WiFi.status() == WL_CONNECTED){
-    Serial.println("\nWiFi Baglandi! IP: ");
-    Serial.println(WiFi.localIP());
-    // Bağlantı başarılı olunca kısa bir "Bip" sesi verelim
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("WiFi Baglandi! IP: %s\n", WiFi.localIP().toString().c_str());
     digitalWrite(BUZZER_PIN, HIGH); delay(100); digitalWrite(BUZZER_PIN, LOW);
   } else {
-    Serial.println("\nWiFi Baglantisi Basarisiz! (Isim/Sifre kontrol et)");
+    Serial.println("WiFi Baglantisi Basarisiz — USB serial fallback aktif.");
   }
 }
 
+// -------------------------------------------------------
+// YARDIMCI: Sensor olusumu gonder
+// -------------------------------------------------------
+void httpGonder(const String& jsonVerisi) {
+  HTTPClient http;
+  http.setTimeout(HTTP_TIMEOUT_MS);
+  http.begin(serverUrl);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-api-key", DEVICE_API_KEY);
+
+  int kod = http.POST(jsonVerisi);
+  if (kod > 0) {
+    Serial.printf("HTTP %d — veri gonderildi.\n", kod);
+  } else {
+    Serial.printf("HTTP hatasi: %d\n", kod);
+  }
+  http.end();
+}
+
+// -------------------------------------------------------
+// SETUP
+// -------------------------------------------------------
+void setup() {
+  Serial.begin(115200);
+
+  dht.begin();
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  // Server URL'yi runtime'da bir kez olustur
+  serverUrl = String("http://") + SERVER_HOST + ":" + SERVER_PORT + "/api/v1/data";
+
+  wifiBaglan();
+  sonWifiDenemesi = millis();
+}
+
+// -------------------------------------------------------
+// LOOP — tamamen non-blocking; delay() YOK
+// -------------------------------------------------------
 void loop() {
-  // Sensörleri Oku
-  float nem = dht.readHumidity();
-  float ham_sicaklik = dht.readTemperature();
-  
-  // DÜZELTME 2: Okuma yaptığımız değişkenin ve pinin adını düzelttik
-  int ham_gaz = analogRead(MQ135_PIN); 
+  unsigned long simdi = millis();
 
-  if (isnan(nem) || isnan(ham_sicaklik)) {
-    Serial.println("Sensör Okuma Hatası!");
-    return;
-  }
-
-  // --- ALARM MANTIĞI ---
-  // Eğer gaz değeri eşiği (1200) geçerse alarm çalsın
-  if (ham_gaz > gaz_esik_degeri) {
-    Serial.println("!!! TEHLİKE: YÜKSEK HAVA KİRLİLİĞİ !!!");
-    // Kesik kesik öttür (Bip-Bip-Bip)
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(100);
-    digitalWrite(BUZZER_PIN, LOW);
-    delay(100);
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(100);
-    digitalWrite(BUZZER_PIN, LOW);
-  } else {
-    // Değer normalse sus
-    digitalWrite(BUZZER_PIN, LOW);
-  }
-  // ------------------------------------
-
-  // Kalibrasyon
-  float gercek_sicaklik = ham_sicaklik - sicaklik_sapmasi;
-
-  // --- JSON PAKETLEME ---
-  StaticJsonDocument<200> doc;
-  doc["serial_number"] = DEVICE_ID;
-  doc["temperature"] = gercek_sicaklik;
-  doc["humidity"] = nem;
-  
-  // DÜZELTME 3 (EN ÖNEMLİSİ): Backend artık bu ismi bekliyor!
-  doc["mq135_value"] = ham_gaz; 
-
-  String jsonVerisi;
-  serializeJson(doc, jsonVerisi);
-
-  // --- SERVER'A GÖNDERME ---
-  if(WiFi.status() == WL_CONNECTED){
-    HTTPClient http;
-    
-    // Timeout ayarı korundu (-11 hatası almamak için)
-    http.setTimeout(10000); 
-    
-    http.begin(SERVER_URL);
-    
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("x-api-key", API_KEY);
-    
-    int httpResponseCode = http.POST(jsonVerisi);
-    
-    if(httpResponseCode > 0){
-      String response = http.getString();
-      Serial.print("Gönderildi (MQ-135: "); // Log yazısını da düzelttik
-      Serial.print(ham_gaz);
-      Serial.print(") -> Sunucu Cevabı: ");
-      Serial.println(httpResponseCode);
-    } else {
-      Serial.print("HATA KODU: ");
-      Serial.println(httpResponseCode);
-    }
-    http.end();
-  } else {
-    Serial.println("WiFi Kopuk! Tekrar bağlanılıyor...");
+  // Wi-Fi kopuk ve yeniden deneme suresi gectiyse
+  if (WiFi.status() != WL_CONNECTED && (simdi - sonWifiDenemesi >= WIFI_RETRY_MS)) {
+    Serial.println("WiFi Kopuk — yeniden baglaniliyor...");
     WiFi.reconnect();
+    sonWifiDenemesi = simdi;
   }
-  
-  // Döngü gecikmesi
-  delay(2500); 
+
+  // Olcum zamani geldiyse sensoru oku ve gonder
+  if (simdi - sonOlcumZamani >= OLCUM_ARALIK_MS) {
+    sonOlcumZamani = simdi;
+
+    float nem          = dht.readHumidity();
+    float ham_sicaklik = dht.readTemperature();
+    int   ham_gaz      = analogRead(MQ135_PIN);
+
+    if (isnan(nem) || isnan(ham_sicaklik)) {
+      Serial.println("DHT11 okunamadi — varsayilan deger kullaniliyor.");
+      nem = 0.0f;
+      ham_sicaklik = 0.0f;
+    }
+
+    // --- ALARM MANTIĞI ---
+    bool tehlike = (ham_gaz > GAZ_ESIK);
+    if (tehlike && !buzzerAktif) {
+      Serial.println("!!! TEHLIKE: YUKSEK HAVA KIRLILIGI !!!");
+      buzzerAktif = true;
+    } else if (!tehlike && buzzerAktif) {
+      buzzerAktif = false;
+    }
+    // Buzzer'i dogrudan millis() ile surmek yerine basit HIGH/LOW;
+    // gercek non-blocking bip icin Ticker kutuphanesi onerilir (Sprint-2).
+    digitalWrite(BUZZER_PIN, tehlike ? HIGH : LOW);
+
+    float gercek_sicaklik = ham_sicaklik - SICAKLIK_SAPMASI;
+
+    // --- JSON PAKETLEME ---
+    StaticJsonDocument<200> doc;
+    doc["serial_number"] = DEVICE_ID;
+    doc["temperature"]   = gercek_sicaklik;
+    doc["humidity"]      = nem;
+    doc["mq135_value"]   = ham_gaz;
+
+    String jsonVerisi;
+    serializeJson(doc, jsonVerisi);
+
+    // USB serial — WiFi olmasa bile Python bridge okur
+    Serial.println("DATA:" + jsonVerisi);
+
+    // HTTP gonder (sadece WiFi varsa)
+    if (WiFi.status() == WL_CONNECTED) {
+      httpGonder(jsonVerisi);
+    }
+  }
 }

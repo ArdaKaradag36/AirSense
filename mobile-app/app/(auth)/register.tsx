@@ -17,10 +17,13 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errorText, setErrorText] = useState("");
   const [checkingDevice, setCheckingDevice] = useState(true);
+  const [signingUp, setSigningUp] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const checkPendingDevice = async () => {
       const pendingSerial = await deviceService.getPendingDeviceSerial();
+      if (cancelled) return;
       if (!pendingSerial) {
         setErrorText("Kayit adimindan once cihazinizi dogrulamaniz gerekiyor.");
         router.replace("/");
@@ -29,8 +32,11 @@ export default function RegisterScreen() {
       setCheckingDevice(false);
     };
 
-    checkPendingDevice();
-  }, [router]);
+    if (!signingUp) {
+      checkPendingDevice();
+    }
+    return () => { cancelled = true; };
+  }, []);
 
   const passwordChecks = useMemo(() => validatePasswordForRegister(password), [password]);
 
@@ -57,10 +63,14 @@ export default function RegisterScreen() {
     }
 
     try {
+      setSigningUp(true);
+      console.log("[RegisterScreen] signUp cagiriliyor...");
       await signUp(email.trim(), password, fullName.trim());
-      router.replace("/(tabs)");
+      console.log("[RegisterScreen] signUp BASARILI — tabs'a yonlendirilmeli");
     } catch (error: unknown) {
+      setSigningUp(false);
       const message = error instanceof Error ? error.message : "Kayit sirasinda bir hata olustu.";
+      console.error("[RegisterScreen] signUp HATA:", message, error);
       setErrorText(message);
     }
   };

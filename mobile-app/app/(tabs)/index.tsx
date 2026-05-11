@@ -1,6 +1,6 @@
 // Dosya: mobile-app/app/(tabs)/index.tsx
 
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 // 👇 Platform EKLENDİ
 import { StyleSheet, Text, View, ScrollView, RefreshControl, Dimensions, ActivityIndicator } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
@@ -9,6 +9,7 @@ import { useSensorData } from '../../context/SensorContext';
 import { useTheme } from '../../context/ThemeContext';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
 import CustomHeader from '../../components/CustomHeader';
+import { mapCo2SeriesToQualityScores, padLineChartPairs } from '../../utils/co2QualityChart';
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -27,7 +28,6 @@ export default function HomeScreen() {
   const { isDarkMode, theme } = useTheme();
 
   const [refreshing, setRefreshing] = useState(false);
-  const chartScrollRef = useRef<ScrollView | null>(null);
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -41,18 +41,23 @@ export default function HomeScreen() {
   const vocValue = latest ? Number(latest.voc_index) : 0;
   const themeColor = getStatusColorFromString(currentStatus);
 
-  const chartDataPoints = validData.length > 0 
-    ? validData.slice(0, 20).reverse().map(d => Number(d.co2_ppm))
-    : [0];
+  const chartWindow = validData.slice(0, 24).reverse();
+  const co2SeriesForChart =
+    chartWindow.length > 0 ? chartWindow.map((d) => Number(d.co2_ppm)) : [];
+  const rawScores = mapCo2SeriesToQualityScores(co2SeriesForChart);
 
-  const chartLabels = validData.length > 0 
-    ? validData.slice(0, 20).reverse().map((d, index) => {
-        if (index % 3 !== 0) return "";
-        const date = new Date(d.created_at);
-        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-      }) 
-    : ["..."];
-  const dynamicChartWidth = Math.max(screenWidth - 60, chartDataPoints.length * 34);
+  const chartLabelsRaw =
+    chartWindow.length > 0
+      ? chartWindow.map((d, index) => {
+          if (index % 3 !== 0) return '';
+          const date = new Date(d.created_at);
+          return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+        })
+      : ['—'];
+
+  const { scores: chartDataPoints, labels: chartLabels } = padLineChartPairs(rawScores, chartLabelsRaw);
+  const chartHasRealPoints = chartWindow.length > 0;
+  const dynamicChartWidth = Math.max(screenWidth - 48, chartDataPoints.length * 36);
   const lastUpdateText =
     latest && latest.created_at
       ? new Date(latest.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -108,36 +113,43 @@ export default function HomeScreen() {
 
             {/* CHART CARD */}
             <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
-              <View style={styles.chartHeader}>
-                <Text style={[styles.chartTitle, { color: theme.text }]}>Kalite Trendi</Text>
-              </View>
-              <View style={styles.rangeRow}>
-                <View style={[styles.rangeButton, styles.rangeButtonActive]}>
-                  <Text style={[styles.rangeButtonText, styles.rangeButtonTextActive]}>Canlı</Text>
-                </View>
-              </View>
+              <Text style={[styles.chartTitle, { color: theme.text }]}>Canlı kalite grafiği</Text>
+              <Text style={[styles.chartCaption, { color: theme.subText }]}>
+                Çizgi, tahmini CO2 değerine göre hesaplanan{' '}
+                <Text style={{ fontWeight: '700', color: theme.text }}>hava kalitesi skorudur</Text>
+                {' '}(0–100).{'\n'}
+                Yukarı daha temiz, aşağı daha kirli ortam demektir. Veriler yaklaşık 10 saniyede bir yenilenir.
+              </Text>
+              {!chartHasRealPoints ? (
+                <Text style={[styles.chartEmpty, { color: theme.subText }]}>
+                  Grafik için sunucuda birkaç ardışık ölçüm birikmeli. Cihaz gönderiyorsa bir dakika içinde çizgi belirir.
+                </Text>
+              ) : (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chartScrollContent}
-                ref={chartScrollRef}
-                onContentSizeChange={() => chartScrollRef.current?.scrollToEnd({ animated: true })}
               >
                 <LineChart
                   data={lineChartData}
                   width={dynamicChartWidth}
                   height={220}
                   chartConfig={chartConfig}
+                  fromZero
+                  segments={4}
+                  yAxisSuffix=""
                   bezier
-                  withDots={true}
+                  withDots={chartDataPoints.length <= 12}
                   withInnerLines={true}
                   withOuterLines={false}
                   withVerticalLines={false}
                   style={{ marginVertical: 8, borderRadius: 16, paddingRight: 0, marginLeft: -10 }}
                 />
               </ScrollView>
-              <Text style={[styles.refreshNote, { color: theme.subText }]}>Veri yenileme hızı: 10sn</Text>
-              <Text style={[styles.lastUpdateNote, { color: theme.subText }]}>Son guncelleme: {lastUpdateText}</Text>
+              )}
+              <Text style={[styles.lastUpdateNote, { color: theme.subText }]}>
+                Son güncelleme: {lastUpdateText}
+              </Text>
             </View>
 
             {/* DETAILS CARD */}
@@ -166,8 +178,20 @@ export default function HomeScreen() {
 
                 <View style={styles.detailRow}>
                   <View style={styles.detailIconContainer}><MaterialCommunityIcons name="air-filter" size={24} color="#607D8B" /></View>
-                  <Text style={[styles.detailLabel, { color: theme.subText }]}>Hava Kalitesi (VOC):</Text>
-                  <Text style={[styles.detailValue, { color: themeColor, fontWeight: 'bold' }]}>{vocValue}</Text>
+                  <View style={styles.detailTextColumn}>
+                    <Text style={[styles.detailColumnTitle, { color: theme.subText }]}>
+                      Organik gazlar (VOC indeksi)
+                    </Text>
+                    <Text style={[styles.vocExplain, { color: theme.subText }]}>
+                      Düşük sayı = daha temiz hava (Sensirion tarzı ölçek).
+                    </Text>
+                  </View>
+                  <View style={styles.detailValueColumn}>
+                    <Text style={[styles.detailValue, { color: themeColor, fontWeight: 'bold' }]}>
+                      {vocValue}
+                    </Text>
+                    <Text style={[styles.vocBand, { color: themeColor }]}>{vocBandLabel(vocValue)}</Text>
+                  </View>
                 </View>
               </View>
             )}
@@ -198,7 +222,16 @@ const getStatusTurkish = (status: string | null) => {
         case "HAZARDOUS": return "Tehlikeli";
         default: return "Bulut Baglantisi Bekleniyor...";
     }
-}
+};
+
+/** VOC: düşük = iyi (≤100 iyi, ≤200 orta, …). */
+const vocBandLabel = (voc: number): string => {
+  if (!Number.isFinite(voc) || voc <= 0) return 'Ölçüm yok';
+  if (voc <= 100) return 'İyi aralık';
+  if (voc <= 200) return 'Orta aralık';
+  if (voc <= 300) return 'Sağlıksız aralık';
+  return 'Tehlikeli aralık';
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -211,21 +244,20 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 25, fontWeight: 'bold', marginTop: 8 },
   
   chartCard: { borderRadius: 20, padding: 20, marginBottom: 20, marginHorizontal: 20, shadowColor: "#000", shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
-  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  chartTitle: { fontSize: 18, fontWeight: 'bold' },
-  rangeRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  rangeButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, alignSelf: 'flex-start' },
-  rangeButtonActive: { backgroundColor: '#00C853' },
-  rangeButtonText: { fontSize: 13, fontWeight: '600' },
-  rangeButtonTextActive: { color: '#FFFFFF' },
+  chartCaption: { fontSize: 13, marginBottom: 12, lineHeight: 20 },
+  chartTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
+  chartEmpty: { fontSize: 13, marginBottom: 8, lineHeight: 18 },
   chartScrollContent: { paddingRight: 10 },
-  refreshNote: { marginTop: 6, fontSize: 12, textAlign: 'right' },
-  lastUpdateNote: { marginTop: 2, fontSize: 12, textAlign: 'right' },
+  lastUpdateNote: { marginTop: 8, fontSize: 12, textAlign: 'right' },
   
   detailsCard: { borderRadius: 20, padding: 20, marginBottom: 30, marginHorizontal: 20, shadowColor: "#000", shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
   detailRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
   detailIconContainer: { width: 40, alignItems: 'center' },
   detailLabel: { flex: 1, fontSize: 16, marginLeft: 10 },
+  detailTextColumn: { flex: 1, marginLeft: 10, justifyContent: 'center' },
+  detailValueColumn: { alignItems: 'flex-end', justifyContent: 'center' },
+  detailColumnTitle: { fontSize: 16 },
+  vocBand: { fontSize: 13, fontWeight: '600', marginTop: 4 },
   detailValue: { fontSize: 18, fontWeight: 'bold' },
   separator: { height: 1, marginLeft: 50 },
 

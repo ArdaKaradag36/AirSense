@@ -6,29 +6,54 @@ from typing import Optional
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from supabase import Client, create_client
 
-# backend/ dizininde calistirildiginda .env yuklenir
 load_dotenv()
 
 app = FastAPI(title="AirSense API")
+
+# ---------------------------------------------------------------------------
+# CORS — izin verilen originler ENV'den okunur; prod'da wildcard YASAKTIR.
+# Ornek backend/.env:  ALLOWED_ORIGINS=https://airsense.io,https://app.airsense.io
+# Gelistirme icin:     ALLOWED_ORIGINS=http://localhost:8081,http://localhost:19006
+# ---------------------------------------------------------------------------
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS: list[str] = (
+    [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    if _raw_origins
+    else []
+)
+if not ALLOWED_ORIGINS:
+    # Hicbir origin tanimlanmamissa sadece localhost'a izin ver (guvenli fallback)
+    ALLOWED_ORIGINS = ["http://localhost:8081", "http://localhost:19006"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type", "x-api-key"],
 )
 
-# --- GÜVENLİK AYARLARI ---
-API_SECRET = "airsense-2025-secure-key-v1" 
+# ---------------------------------------------------------------------------
+# GUVENLIK — API_SECRET sadece ENV'den gelir, kaynak koduna yazilmaz.
+# backend/.env dosyasina ekleyin:
+#   AIRSENSE_API_SECRET=<openssl rand -hex 32 ile uretilmis guclu secret>
+# ---------------------------------------------------------------------------
+API_SECRET: str = os.getenv("AIRSENSE_API_SECRET", "")
+if not API_SECRET:
+    raise RuntimeError(
+        "AIRSENSE_API_SECRET ortam degiskeni tanimlanmamis. "
+        "backend/.env dosyasina ekleyin ve uvicorn'u yeniden baslatin."
+    )
 
-# --- SUPABASE (ENV) ---
-# Dashboard -> Project Settings -> API: Project URL + service_role (secret) key.
-# UYARI: service_role RLS'i bypass eder; sadece sunucuda tut, istemciye verme.
+# ---------------------------------------------------------------------------
+# SUPABASE (ENV) — service_role RLS'i bypass eder; sadece sunucuda tutulur.
+# ---------------------------------------------------------------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
@@ -39,170 +64,256 @@ if SUPABASE_URL and SUPABASE_KEY:
         print("Supabase baglantisi basariyla kuruldu.")
     except Exception as e:
         print(f"Supabase baglanti hatasi: {e}")
-        supabase = None
 else:
     print(
         "Supabase yapilandirmasi eksik: SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY "
-        "ortam degiskenlerini ayarlayin (ornek: backend/.env — bkz. backend/.env.example)."
+        "ortam degiskenlerini ayarlayin."
     )
 
 
 def require_supabase() -> Client:
-    """Baglanti yoksa 503 dondur; NameError yerine anlasilir hata."""
     if supabase is None:
         raise HTTPException(
             status_code=503,
             detail=(
                 "Supabase baglantisi kurulamadi. "
-                "backend/.env dosyasinda SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY "
-                "tanimlayip uvicorn'u yeniden baslatin."
+                "backend/.env icinde SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY tanimlayin."
             ),
         )
     return supabase
 
-# ----------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# JWT BEARER DOGRULAMASI — mobil endpointleri icin Supabase JWT zorunludur.
+# ---------------------------------------------------------------------------
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def require_auth_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(_bearer_scheme),
+) -> dict:
+    """
+    Authorization: Bearer <supabase_access_token> basligini dogrular.
+    Gecersiz veya eksik token durumunda 401 doner.
+    Basarili dogrulamada Supabase user sozlugunu dondurur.
+    """
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Bu endpoint icin Authorization: Bearer <token> gereklidir.",
+        )
+    db = require_supabase()
+    try:
+        response = db.auth.get_user(credentials.credentials)
+        if not response or not response.user:
+            raise HTTPException(status_code=401, detail="Gecersiz veya suresi dolmus token.")
+        return {"id": response.user.id, "email": response.user.email}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token dogrulanamadi.")
+
+
+# ---------------------------------------------------------------------------
 # MODELLER
-# ----------------------------------------------------
+# ---------------------------------------------------------------------------
 class SensorData(BaseModel):
-    serial_number: str = Field(..., description="ESP32 cihazının benzersiz ID'si.")
+    serial_number: str = Field(..., description="ESP32 cihazinin benzersiz ID'si.")
     temperature: float = Field(..., ge=-50.0, le=100.0)
     humidity: float = Field(..., ge=0.0, le=100.0)
-    co2_ppm: int = Field(..., ge=0, description="SCD40 sensöründen CO2 değeri (ppm).")
-    voc_index: int = Field(..., ge=0, le=500, description="SGP40 sensöründen VOC indeks değeri.")
+    co2_ppm: Optional[int] = Field(None, ge=0, description="SCD40 CO2 degeri (ppm).")
+    voc_index: Optional[int] = Field(None, ge=0, le=500, description="SGP40 VOC indeks degeri.")
+    mq135_value: Optional[int] = Field(None, ge=0, description="MQ-135 ham analog degeri.")
+
 
 class TokenRequest(BaseModel):
     token: str
 
-# ----------------------------------------------------
-# YARDIMCI FONKSİYONLAR
-# ----------------------------------------------------
-def calculate_status(voc_index: int) -> str:
-    """VOC indeks değerine göre hava kalitesi durumunu belirler."""
-    if voc_index <= 100:
-        return "GOOD"
-    elif voc_index <= 200:
-        return "MODERATE"
-    elif voc_index <= 300:
-        return "UNHEALTHY"
-    else:
-        return "HAZARDOUS"
 
-def send_push_notification(expo_token: str, title: str, body: str):
-    """Expo Push API kullanarak telefona bildirim gönderir."""
+# ---------------------------------------------------------------------------
+# YARDIMCI FONKSIYONLAR
+# ---------------------------------------------------------------------------
+def mq135_to_voc_index(mq: int) -> int:
+    """MQ-135 ham ADC (~0-4095) -> VOC indeksi (~0-500)."""
+    mq = max(0, min(int(mq), 4095))
+    if mq < 600:
+        return min(99, int(mq * 99 / max(1, 599)))
+    if mq < 900:
+        return 100 + min(99, int((mq - 600) * 99 / 299))
+    if mq < 1200:
+        return 200 + min(99, int((mq - 900) * 99 / 299))
+    span = max(1, 4095 - 1200)
+    return min(500, 300 + int((mq - 1200) * 200 / span))
+
+
+def mq135_to_approx_co2_ppm(mq: int) -> int:
+    """MQ-135 ile yaklasik CO2 olcumu (gercek SCD40 degeri degildir)."""
+    mq = max(0, min(int(mq), 4095))
+    return min(5000, max(350, 400 + int(mq * 0.45)))
+
+
+def calculate_status(voc_index: Optional[int], mq135_value: Optional[int] = None) -> str:
+    if voc_index is not None:
+        if voc_index <= 100:
+            return "GOOD"
+        elif voc_index <= 200:
+            return "MODERATE"
+        elif voc_index <= 300:
+            return "UNHEALTHY"
+        return "HAZARDOUS"
+    if mq135_value is not None:
+        if mq135_value < 600:
+            return "GOOD"
+        elif mq135_value < 900:
+            return "MODERATE"
+        elif mq135_value < 1200:
+            return "UNHEALTHY"
+        return "HAZARDOUS"
+    return "UNKNOWN"
+
+
+def send_push_notification(expo_token: str, title: str, body: str) -> None:
     url = "https://exp.host/--/api/v2/push/send"
     message = {
         "to": expo_token,
         "sound": "default",
         "title": title,
         "body": body,
-        "data": {"project": "AirSense"}, # İsteğe bağlı veri
+        "data": {"project": "AirSense"},
     }
-    
     try:
-        response = requests.post(url, json=message)
-        # Expo'dan gelen yanıtı kontrol etmek istersen:
-        # print(f"Push Result: {response.text}")
+        requests.post(url, json=message, timeout=5)
     except Exception as e:
-        print(f"Push Gönderme Hatası: {e}")
+        print(f"Push Gonderme Hatasi: {e}")
 
-# ----------------------------------------------------
+
+# ---------------------------------------------------------------------------
 # ENDPOINTLER
-# ----------------------------------------------------
+# ---------------------------------------------------------------------------
 
-# 1. ENDPOINT: Cihazdan Veri Alma (POST)
-# 1. ENDPOINT: Cihazdan Veri Alma (POST)
+# 1. Cihazdan Veri Alma — x-api-key ile korunur (cihaz kimlik dogrulamasi)
 @app.post("/api/v1/data")
 def receive_data(data: SensorData, x_api_key: str = Header(None)):
-    
-    # Güvenlik Kontrolü
-    if x_api_key != API_SECRET:
-        raise HTTPException(status_code=401, detail="Yetkisiz Erişim: Yanlış API Key")
+    if not x_api_key or x_api_key != API_SECRET:
+        raise HTTPException(status_code=401, detail="Yetkisiz Erisim: Yanlis API Key")
 
-    # Veri İşleme
-    status = calculate_status(data.voc_index)
-    is_alert = status == "HAZARDOUS" # Kırmızı seviye alarm
+    voc_store = data.voc_index
+    co2_store = data.co2_ppm
+    if data.mq135_value is not None:
+        if voc_store is None:
+            voc_store = mq135_to_voc_index(data.mq135_value)
+        if co2_store is None:
+            co2_store = mq135_to_approx_co2_ppm(data.mq135_value)
+
+    status = calculate_status(voc_store, data.mq135_value if voc_store is None else None)
+    is_alert = status == "HAZARDOUS"
 
     kayit = {
         "device_serial": data.serial_number,
         "temperature": data.temperature,
         "humidity": data.humidity,
-        "co2_ppm": data.co2_ppm,
-        "voc_index": data.voc_index,
+        "co2_ppm": co2_store,
+        "voc_index": voc_store,
+        "mq135_value": data.mq135_value,
         "air_quality_status": status,
-        "is_alert": is_alert
+        "is_alert": is_alert,
     }
 
     db = require_supabase()
     try:
-        # Veritabanına Yaz
         db.table("sensor_readings").insert(kayit).execute()
 
-        # --- KRİTİK BÖLÜM: BİLDİRİM GÖNDERME ---
         if is_alert:
-            print(f"!!! ACİL DURUM: {data.serial_number} cihazında seviye HAZARDOUS!")
-
-            # 1. Veritabanından kayıtlı telefon tokenlarını çek
+            print(f"!!! ACIL DURUM: {data.serial_number} cihazinda seviye HAZARDOUS!")
             users_response = db.table("mobile_clients").select("expo_token").execute()
-            
-            # 2. Herkese bildirim at
             if users_response.data:
                 for user in users_response.data:
-                    # DÜZELTME: Pylance için tip kontrolü (User sözlük mü?)
                     if isinstance(user, dict):
                         token = user.get("expo_token")
-                        
-                        # DÜZELTME: Token gerçekten bir String mi?
                         if token and isinstance(token, str):
                             send_push_notification(
                                 expo_token=token,
-                                title="🚨 HAVA KALİTESİ UYARISI!",
-                                body=f"Dikkat! Ortamdaki VOC seviyesi tehlikeli sınıra ulaştı. (VOC Index: {data.voc_index})"
+                                title="HAVA KALİTESİ UYARISI!",
+                                body=f"Ortamdaki VOC seviyesi tehlikeli sinira ulasti. (VOC Index: {voc_store})",
                             )
-                            print(f"-> Bildirim gönderildi: {token[:15]}...")
+                            print(f"-> Bildirim gonderildi: {token[:15]}...")
 
         return {"status": "success", "message": "Data recorded successfully."}
-    
     except Exception as e:
-        print(f"Sistem Hatası: {e}")
+        print(f"Sistem Hatasi: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# 2. ENDPOINT: Mobil Veri Çekme (GET)
+
+# 2. Mobil Veri Cekme — Supabase JWT zorunludur
 @app.get("/api/v1/history")
-def get_history(serial_number: str, limit: int = 20):
+def get_history(
+    serial_number: str,
+    limit: int = 20,
+    current_user: dict = Depends(require_auth_user),
+):
     db = require_supabase()
     try:
-        response = db.table("sensor_readings")\
-            .select("temperature, humidity, co2_ppm, voc_index, air_quality_status, created_at")\
-            .eq("device_serial", serial_number)\
-            .order("created_at", desc=True)\
-            .limit(limit)\
-            .execute() 
+        # Kullanicinin sadece kendi cihazinin verisine eristigini dogrula
+        device_check = (
+            db.table("devices")
+            .select("id")
+            .eq("serial_number", serial_number)
+            .eq("user_id", current_user["id"])
+            .limit(1)
+            .execute()
+        )
+        if not device_check.data:
+            raise HTTPException(
+                status_code=403,
+                detail="Bu cihaza erisim izniniz yok.",
+            )
+
+        response = (
+            db.table("sensor_readings")
+            .select("temperature, humidity, co2_ppm, voc_index, air_quality_status, created_at")
+            .eq("device_serial", serial_number)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Veri Çekme Hatası: {e}")
+        print(f"Veri Cekme Hatasi: {e}")
         raise HTTPException(status_code=500, detail="Could not fetch data.")
 
-# 3. ENDPOINT: Mobil Token Kayıt
+
+# 3. Mobil Push Token Kayit — Supabase JWT zorunludur
 @app.post("/api/v1/register-token")
-def register_token(request: TokenRequest):
+def register_token(
+    request: TokenRequest,
+    current_user: dict = Depends(require_auth_user),
+):
     db = require_supabase()
     try:
         db.table("mobile_clients").upsert(
-            {"expo_token": request.token}, 
-            on_conflict="expo_token"
+            {"expo_token": request.token, "user_id": current_user["id"]},
+            on_conflict="expo_token",
         ).execute()
         return {"status": "success", "message": "Token registered successfully."}
     except Exception as e:
-        print(f"Token Kayıt Hatası: {e}")
+        print(f"Token Kayit Hatasi: {e}")
         raise HTTPException(status_code=500, detail="Token registration failed.")
 
-# 4. ENDPOINT: Mobil Token Silme
+
+# 4. Mobil Push Token Silme — Supabase JWT zorunludur
 @app.post("/api/v1/unregister-token")
-def unregister_token(request: TokenRequest):
+def unregister_token(
+    request: TokenRequest,
+    current_user: dict = Depends(require_auth_user),
+):
     db = require_supabase()
     try:
-        db.table("mobile_clients").delete().eq("expo_token", request.token).execute()
+        db.table("mobile_clients").delete().eq("expo_token", request.token).eq(
+            "user_id", current_user["id"]
+        ).execute()
         return {"status": "success", "message": "Token removed successfully."}
     except Exception as e:
-        print(f"Token Silme Hatası: {e}")
+        print(f"Token Silme Hatasi: {e}")
         raise HTTPException(status_code=500, detail="Token removal failed.")

@@ -1,12 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Link, useRouter } from "expo-router";
+import { Link } from "expo-router";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
-import { deviceService } from "../../services/deviceService";
 
 export default function LoginScreen() {
-  const router = useRouter();
   const { theme, isDarkMode } = useTheme();
   const { signIn, loading } = useAuth();
   const [email, setEmail] = useState("");
@@ -19,8 +17,7 @@ export default function LoginScreen() {
     setErrorText("");
     try {
       await signIn(email.trim(), password);
-      const deviceSerial = await deviceService.getUserDeviceSerial();
-      router.replace(deviceSerial ? "/(tabs)" : "/");
+      // Navigasyon _layout.tsx AppNavigator tarafından user state'e göre yapılır
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Giris yapilirken bir hata olustu.";
       setErrorText(message);

@@ -4,3 +4,6 @@
 hardware/.pio
 hardware/.pio/
 .vscode/
+
+# Gercek kimlik bilgilerini iceren dosya — ASLA commit edilmez
+secrets.h

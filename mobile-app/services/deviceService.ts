@@ -123,19 +123,49 @@ export const deviceService = {
     return result;
   },
 
+  async getDeviceSerialForUserId(userId: string): Promise<string | null> {
+    this.ensureConfig();
+    if (!userId) return null;
+    const { data, error } = await supabase
+      .from("devices")
+      .select("serial_number")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[deviceService] getDeviceSerialForUserId query hatasi:", error.message);
+      throw error;
+    }
+    const serial = data?.serial_number ?? null;
+    console.log("[deviceService] getDeviceSerialForUserId:", serial, "| userId:", userId);
+    return serial;
+  },
+
   async getUserDeviceSerial(): Promise<string | null> {
     this.ensureConfig();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError) {
-      console.error("[deviceService] getUserDeviceSerial getUser hatasi:", userError.message);
-      throw userError;
+    /* Giriş anında JWT henüz yazılmışken getUser() ara ara "session missing"
+       verebiliyor; önce bellek içi session kullan */
+    const sessionUser = (await supabase.auth.getSession()).data.session?.user ?? null;
+    let resolvedUserId = sessionUser?.id ?? null;
+
+    if (!resolvedUserId) {
+      const { data: gu, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        if (userError.message?.includes("session") || userError.name === "AuthSessionMissingError") {
+          return null;
+        }
+        console.error("[deviceService] getUserDeviceSerial getUser hatasi:", userError.message);
+        throw userError;
+      }
+      resolvedUserId = gu.user?.id ?? null;
     }
-    if (!user) return null;
+    if (!resolvedUserId) return null;
 
     const { data, error } = await supabase
       .from("devices")
       .select("serial_number")
-      .eq("user_id", user.id)
+      .eq("user_id", resolvedUserId)
       .limit(1)
       .maybeSingle();
 
@@ -145,7 +175,7 @@ export const deviceService = {
     }
 
     const serial = data?.serial_number ?? null;
-    console.log("[deviceService] getUserDeviceSerial:", serial, "| userId:", user.id);
+    console.log("[deviceService] getUserDeviceSerial:", serial, "| userId:", resolvedUserId);
     return serial;
   },
 

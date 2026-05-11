@@ -7,6 +7,7 @@ import { safeStorage, supabase } from "../services/supabaseClient";
 
 interface AuthContextType {
   loading: boolean;
+  initializing: boolean;
   user: User | null;
   session: Session | null;
   /**
@@ -18,7 +19,8 @@ interface AuthContextType {
   recoveryMode: boolean;
   clearRecoveryMode: () => void;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  /** Basarili giris sonrasi user (yönlendirme icin id gerekir) */
+  signIn: (email: string, password: string) => Promise<User | null>;
   signOut: () => Promise<void>;
 }
 
@@ -26,6 +28,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [recoveryMode, setRecoveryMode] = useState(false);
@@ -44,7 +47,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (error) {
         console.error("[AuthContext] bootstrap hatasi:", error);
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          setInitializing(false);
+        }
       }
     };
 
@@ -75,6 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const value = useMemo<AuthContextType>(
     () => ({
       loading,
+      initializing,
       user,
       session,
       recoveryMode,
@@ -86,6 +93,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const result = await authService.signUp(email, password, fullName);
           console.log("[AuthContext] signUp: kullanici olusturuldu, id=", result.user?.id, "| session=", result.session ? "var" : "yok (email onayi gerekebilir)");
 
+          if (!result.user?.id) {
+            throw new Error("Kullanici ID alinamadigi icin cihaz zimmetleme yapilamadi.");
+          }
+
+          if (!result.session) {
+            console.warn("[AuthContext] signUp: session null — email onay bekliyor olabilir. signIn ile devam ediliyor...");
+            try {
+              const signInResult = await authService.signIn(email, password);
+              console.log("[AuthContext] signUp: otomatik signIn basarili, session=", signInResult.session ? "var" : "yok");
+              if (signInResult.session) {
+                result.session = signInResult.session;
+              }
+            } catch (signInErr) {
+              console.warn("[AuthContext] signUp: otomatik signIn basarisiz (email onayi gerekebilir):", signInErr);
+            }
+          }
+
+          // public.users tablosuna kayit ekle (trigger yoksa fallback)
+          try {
+            const { error: profileError } = await supabase
+              .from("users")
+              .upsert({
+                id: result.user.id,
+                username: fullName.trim() || email.split("@")[0],
+                email,
+                created_at: new Date().toISOString(),
+              }, { onConflict: "id" });
+            if (profileError) {
+              console.warn("[AuthContext] signUp: public.users upsert hatasi (trigger handle edebilir):", profileError.message);
+            } else {
+              console.log("[AuthContext] signUp: public.users profili olusturuldu");
+            }
+          } catch (profileErr) {
+            console.warn("[AuthContext] signUp: public.users upsert exception:", profileErr);
+          }
+
           const pendingSerial = await deviceService.getPendingDeviceSerial();
           console.log("[AuthContext] signUp: pendingSerial=", pendingSerial);
 
@@ -93,16 +136,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             throw new Error("Kayit icin once cihaz dogrulamasi yapmaniz gerekiyor.");
           }
 
-          if (!result.user?.id) {
-            throw new Error("Kullanici ID alinamadigi icin cihaz zimmetleme yapilamadi.");
-          }
           await deviceService.claimDevice(pendingSerial, result.user.id);
           console.log("[AuthContext] Cihaz Zimmetlendi:", pendingSerial, "->", result.user.id);
-          await deviceService.clearPendingDeviceSerial();
-          console.log("[AuthContext] signUp: cihaz zimmetlendi ve pending serial temizlendi");
 
           setSession(result.session);
           setUser(result.user);
+
+          await deviceService.clearPendingDeviceSerial();
+          console.log("[AuthContext] signUp: cihaz zimmetlendi ve pending serial temizlendi");
         } finally {
           setLoading(false);
         }
@@ -115,6 +156,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.log("[AuthContext] signIn: basarili, id=", result.user?.id);
           setSession(result.session);
           setUser(result.user);
+          return result.user ?? null;
         } finally {
           setLoading(false);
         }
@@ -149,7 +191,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       },
     }),
-    [loading, session, user, recoveryMode]
+    [loading, initializing, session, user, recoveryMode]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

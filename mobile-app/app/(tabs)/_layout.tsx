@@ -1,10 +1,16 @@
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/haptic-tab';
+import { useAuth } from '../../context/AuthContext';
 
 export default function TabLayout() {
+  const { user, initializing } = useAuth();
+
+  if (initializing) return null;
+  if (!user) return <Redirect href="/(auth)/login" />;
+
   return (
     <Tabs
       screenOptions={{

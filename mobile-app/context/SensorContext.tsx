@@ -13,6 +13,7 @@ import * as Notifications from "expo-notifications";
 import { apiService } from "../services/apiService";
 import { deviceService } from "../services/deviceService";
 import { Notification, SensorData } from "../types/sensor.types";
+import { supabase } from "../services/supabaseClient";
 
 /**
  * Loose Coupling (Gevsek Baglilik) Notu:
@@ -42,6 +43,7 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [phoneNotificationsEnabled, setPhoneNotificationsEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const lastAlertKeyRef = useRef<string>("");
   const unreadCount = notifications.length;
   const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -70,6 +72,7 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
       }
       const mappedHistory = await apiService.getHistory({
         serialNumber: serial,
+        limit: 48,
       });
       console.log("[SensorContext] fetchData: gelen kayit sayisi=", mappedHistory.length);
       if (mappedHistory.length > 0) {
@@ -120,15 +123,30 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Oturum durumunu takip et — login/logout'ta polling'i başlat/durdur
   useEffect(() => {
-    fetchData();
-
-    // Simülatör 10 saniyede bir veri gönderiyor, biz de 10 saniyede bir çekelim.
-    // Polling periyodunu koruyoruz: bu sayede mevcut tasarım davranışı bozulmaz.
-    const interval: any = setInterval(fetchData, 10000);
-
-    return () => clearInterval(interval);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session?.user);
+    });
+    // İlk yüklemede mevcut oturumu kontrol et
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session?.user);
+    });
+    return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setData(null);
+      setHistory([]);
+      setLoading(false);
+      return;
+    }
+
+    fetchData();
+    const interval: any = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   const clearNotifications = () => {
     setNotifications([]);

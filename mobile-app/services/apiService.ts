@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "../constants/api";
+import { supabase } from "./supabaseClient";
 import { AirQualityStatus, SensorData, SensorHistoryParams } from "../types/sensor.types";
 
 const VALID_AIR_QUALITY_STATUSES: readonly AirQualityStatus[] = [
@@ -16,15 +18,56 @@ const toAirQualityStatus = (value: unknown): AirQualityStatus => {
 };
 
 /**
- * Ortam degiskeni notu:
- * Expo istemci tarafinda sadece `EXPO_PUBLIC_` prefix'i ile baslayan degiskenleri okur.
- * Bu nedenle API adresini `.env` icindeki `EXPO_PUBLIC_API_URL` ile yonetiyoruz.
- * Yeni bir bilgisayara gecildiginde veya IP degistiginde sadece `.env` dosyasini guncellemek yeterlidir.
+ * Loose Coupling Mimari Notu:
+ * Uygulamadaki veri erişim katmanı tek bir serviste tutulur.
+ * UI ve Context katmanları "hangi protokol" (HTTP/MQTT) veya "hangi backend" (Supabase/TimescaleDB)
+ * kullanıldığını bilmez; sadece bu servis fonksiyonlarını çağırır.
  */
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
-const HISTORY_URL = `${BASE_URL}/history`;
+const BASE_URL = `${API_BASE_URL}/api/v1`;
+
+const DEFAULT_FETCH_MS = 20_000;
+
+const HISTORY_URL        = `${BASE_URL}/history`;
 const REGISTER_TOKEN_URL = `${BASE_URL}/register-token`;
 const UNREGISTER_TOKEN_URL = `${BASE_URL}/unregister-token`;
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs: number = DEFAULT_FETCH_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Aktif Supabase oturumunun JWT access token'ını döndürür.
+ * Oturum yoksa veya süresi dolmuşsa null döner; çağıran katman 401 alır.
+ */
+async function getAccessToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+/**
+ * Kimlik doğrulaması gerektiren istekler için Authorization: Bearer başlığını ekler.
+ * Token alınamazsa 401 simüle eden bir hata fırlatır; sessizce geçmez.
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getAccessToken();
+  if (!token) {
+    throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın. (401)");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
 
 const mapSensorData = (item: any): SensorData => ({
   id: item.id,
@@ -36,31 +79,18 @@ const mapSensorData = (item: any): SensorData => ({
   created_at: String(item.created_at ?? ""),
 });
 
-/**
- * Loose Coupling Mimari Notu:
- * Uygulamadaki veri erişim katmanı tek bir serviste tutulur.
- * UI ve Context katmanları "hangi protokol" (HTTP/MQTT) veya "hangi backend" (Supabase/TimescaleDB)
- * kullanıldığını bilmez; sadece bu servis fonksiyonlarını çağırır.
- * Böylece yarın teknoloji değiştiğinde sadece servis implementasyonu güncellenir,
- * ekranlar ve iş akışı bozulmadan çalışmaya devam eder.
- */
 export const apiService = {
-  // Bu fonksiyon servis katmanında tanımlanmıştır; yarın MQTT/Supabase entegrasyonu değişse bile çağıran katman aynı kalır.
   async getHistory(params: SensorHistoryParams): Promise<SensorData[]> {
-    const query = new URLSearchParams({
-      serial_number: params.serialNumber,
+    const query = new URLSearchParams({ serial_number: params.serialNumber });
+    if (params.limit)  query.append("limit",  String(params.limit));
+    if (params.period) query.append("period", params.period);
+
+    const headers = await authHeaders();
+    const response = await fetchWithTimeout(`${HISTORY_URL}?${query.toString()}`, {
+      method: "GET",
+      headers,
     });
-    // Gelecek hazirligi: Kullanici bazli veri izolasyonu aktif edildiginde buraya `user_id` query param'i eklenecek.
-    // Ornek: query.append("user_id", currentUserId);
 
-    if (params.limit) {
-      query.append("limit", String(params.limit));
-    }
-    if (params.period) {
-      query.append("period", params.period);
-    }
-
-    const response = await fetch(`${HISTORY_URL}?${query.toString()}`);
     if (!response.ok) {
       throw new Error(`History request failed with status ${response.status}`);
     }
@@ -70,33 +100,30 @@ export const apiService = {
     return payload.map(mapSensorData);
   },
 
-  // Dashboard gibi ekranlar doğrudan backend'e gitmez; bu hazır fonksiyonla son ölçümü alır.
   async getLatestData(serialNumber: string): Promise<SensorData | null> {
-    // Gelecek hazirligi: `getHistory` user_id filtresi aldiginda bu fonksiyon da ayni filtreyi transparent sekilde iletecek.
     const history = await this.getHistory({ serialNumber, limit: 1 });
     return history.length > 0 ? history[0] : null;
   },
 
-  // Push token kayıt/silme çağrılarını da merkezi servis katmanına alıyoruz.
   async registerPushToken(token: string): Promise<void> {
-    const response = await fetch(REGISTER_TOKEN_URL, {
+    const headers = await authHeaders();
+    const response = await fetchWithTimeout(REGISTER_TOKEN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ token }),
     });
-
     if (!response.ok) {
       throw new Error(`Register token failed with status ${response.status}`);
     }
   },
 
   async unregisterPushToken(token: string): Promise<void> {
-    const response = await fetch(UNREGISTER_TOKEN_URL, {
+    const headers = await authHeaders();
+    const response = await fetchWithTimeout(UNREGISTER_TOKEN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ token }),
     });
-
     if (!response.ok) {
       throw new Error(`Unregister token failed with status ${response.status}`);
     }

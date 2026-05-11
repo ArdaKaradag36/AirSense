@@ -16,6 +16,7 @@ export const authService = {
 
   async signUp(email: string, password: string, fullName?: string): Promise<{ user: User | null; session: Session | null }> {
     this.ensureConfig();
+    console.log("[authService] signUp: cagri yapiliyor, email=", email);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -25,14 +26,23 @@ export const authService = {
         },
       },
     });
-    if (error) throw error;
+    if (error) {
+      console.error("[authService] signUp HATA:", error.message, "| status:", error.status, "| name:", error.name);
+      throw error;
+    }
+    console.log("[authService] signUp BASARILI: user=", data.user?.id, "| session=", data.session ? "var" : "null");
     return data;
   },
 
   async signIn(email: string, password: string): Promise<{ user: User | null; session: Session | null }> {
     this.ensureConfig();
+    console.log("[authService] signIn: cagri yapiliyor, email=", email);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    if (error) {
+      console.error("[authService] signIn HATA:", error.message, "| status:", error.status);
+      throw error;
+    }
+    console.log("[authService] signIn BASARILI: user=", data.user?.id, "| session=", data.session ? "var" : "null");
     return data;
   },
 
