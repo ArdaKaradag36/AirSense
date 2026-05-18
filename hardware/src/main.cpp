@@ -35,7 +35,20 @@ bool buzzerAktif              = false;
 // YARDIMCI: Wi-Fi baglantisini kur (blocking yalnizca setup'ta)
 // -------------------------------------------------------
 void wifiBaglan() {
-  Serial.printf("WiFi Baglaniyor: %s\n", WIFI_SSID);
+  // Cevredeki agları tara ve goster — SSID yazimini dogrulamak icin
+  Serial.println("[WiFi] Ag taramasi yapiliyor...");
+  int n = WiFi.scanNetworks();
+  if (n == 0) {
+    Serial.println("[WiFi] Hicbir ag bulunamadi.");
+  } else {
+    Serial.printf("[WiFi] %d ag bulundu:\n", n);
+    for (int i = 0; i < n; i++) {
+      Serial.printf("  [%d] SSID: \"%s\" RSSI: %d dBm\n", i + 1, WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+    }
+  }
+  WiFi.scanDelete();
+
+  Serial.printf("[WiFi] Baglaniyor: \"%s\"\n", WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   int deneme = 0;
@@ -64,11 +77,14 @@ void httpGonder(const String& jsonVerisi) {
   http.addHeader("Content-Type", "application/json");
   http.addHeader("x-api-key", DEVICE_API_KEY);
 
+  Serial.printf("[HTTP] POST -> %s\n", serverUrl.c_str());
+  Serial.printf("[HTTP] Payload: %s\n", jsonVerisi.c_str());
+
   int kod = http.POST(jsonVerisi);
   if (kod > 0) {
-    Serial.printf("HTTP %d — veri gonderildi.\n", kod);
+    Serial.printf("[HTTP] Yanit: %d OK\n", kod);
   } else {
-    Serial.printf("HTTP hatasi: %d\n", kod);
+    Serial.printf("[HTTP] HATA: %d | WiFi durumu: %d\n", kod, (int)WiFi.status());
   }
   http.end();
 }
@@ -98,8 +114,23 @@ void loop() {
 
   // Wi-Fi kopuk ve yeniden deneme suresi gectiyse
   if (WiFi.status() != WL_CONNECTED && (simdi - sonWifiDenemesi >= WIFI_RETRY_MS)) {
-    Serial.println("WiFi Kopuk — yeniden baglaniliyor...");
-    WiFi.reconnect();
+    Serial.printf("[WiFi] Kopuk (status=%d) — begin() ile yeniden baglaniliyor...\n", (int)WiFi.status());
+    WiFi.disconnect(true);
+    delay(100);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    // 5 sn bekle
+    int bekleme = 0;
+    while (WiFi.status() != WL_CONNECTED && bekleme < 10) {
+      delay(500);
+      Serial.print(".");
+      bekleme++;
+    }
+    Serial.println();
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("[WiFi] Baglandi! IP: %s\n", WiFi.localIP().toString().c_str());
+    } else {
+      Serial.printf("[WiFi] Baglanti basarisiz (status=%d), 30 sn sonra tekrar.\n", (int)WiFi.status());
+    }
     sonWifiDenemesi = simdi;
   }
 

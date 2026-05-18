@@ -27,7 +27,6 @@ const BASE_URL = `${API_BASE_URL}/api/v1`;
 
 const DEFAULT_FETCH_MS = 20_000;
 
-const HISTORY_URL        = `${BASE_URL}/history`;
 const REGISTER_TOKEN_URL = `${BASE_URL}/register-token`;
 const UNREGISTER_TOKEN_URL = `${BASE_URL}/unregister-token`;
 
@@ -79,25 +78,42 @@ const mapSensorData = (item: any): SensorData => ({
   created_at: String(item.created_at ?? ""),
 });
 
+const periodToSinceIso = (period?: string): string | null => {
+  if (!period) return null;
+  const now = Date.now();
+  const offsets: Record<string, number> = {
+    "1h": 60 * 60 * 1000,
+    "24h": 24 * 60 * 60 * 1000,
+    "7d": 7 * 24 * 60 * 60 * 1000,
+  };
+  const ms = offsets[period];
+  if (!ms) return null;
+  return new Date(now - ms).toISOString();
+};
+
 export const apiService = {
+  /** Sensör geçmişi — doğrudan Supabase (RLS); telefon LAN API’sine bağlı değil. */
   async getHistory(params: SensorHistoryParams): Promise<SensorData[]> {
-    const query = new URLSearchParams({ serial_number: params.serialNumber });
-    if (params.limit)  query.append("limit",  String(params.limit));
-    if (params.period) query.append("period", params.period);
+    const limit = params.limit ?? 20;
+    let query = supabase
+      .from("sensor_readings")
+      .select(
+        "id, temperature, humidity, co2_ppm, voc_index, air_quality_status, created_at"
+      )
+      .eq("device_serial", params.serialNumber)
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-    const headers = await authHeaders();
-    const response = await fetchWithTimeout(`${HISTORY_URL}?${query.toString()}`, {
-      method: "GET",
-      headers,
-    });
-
-    if (!response.ok) {
-      throw new Error(`History request failed with status ${response.status}`);
+    const since = periodToSinceIso(params.period);
+    if (since) {
+      query = query.gte("created_at", since);
     }
 
-    const payload = await response.json();
-    if (!Array.isArray(payload)) return [];
-    return payload.map(mapSensorData);
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Supabase history failed: ${error.message}`);
+    }
+    return (data ?? []).map(mapSensorData);
   },
 
   async getLatestData(serialNumber: string): Promise<SensorData | null> {

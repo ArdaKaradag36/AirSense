@@ -41,15 +41,23 @@ export default function HomeScreen() {
   const vocValue = latest ? Number(latest.voc_index) : 0;
   const themeColor = getStatusColorFromString(currentStatus);
 
-  const chartWindow = validData.slice(0, 24).reverse();
+  // Sadece son 2 saatin verilerini göster — eski karışık kayıtları filtrele
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  const recentData = validData.filter(
+    (d) => Date.now() - new Date(d.created_at).getTime() <= TWO_HOURS_MS
+  );
+  // Son 20 ölçüm, kronolojik sırayla
+  const chartWindow = recentData.slice(0, 20).reverse();
   const co2SeriesForChart =
     chartWindow.length > 0 ? chartWindow.map((d) => Number(d.co2_ppm)) : [];
   const rawScores = mapCo2SeriesToQualityScores(co2SeriesForChart);
 
+  // Her noktaya saat:dakika etiketi; fazla label kalabalık yaparsa step uygula
+  const step = chartWindow.length > 10 ? 2 : 1;
   const chartLabelsRaw =
     chartWindow.length > 0
       ? chartWindow.map((d, index) => {
-          if (index % 3 !== 0) return '';
+          if (index % step !== 0) return '';
           const date = new Date(d.created_at);
           return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
         })
@@ -57,7 +65,8 @@ export default function HomeScreen() {
 
   const { scores: chartDataPoints, labels: chartLabels } = padLineChartPairs(rawScores, chartLabelsRaw);
   const chartHasRealPoints = chartWindow.length > 0;
-  const dynamicChartWidth = Math.max(screenWidth - 48, chartDataPoints.length * 36);
+  // Her nokta için 44 px genişlik → noktalar sıkışmadan görünür
+  const dynamicChartWidth = Math.max(screenWidth - 32, chartDataPoints.length * 44);
   const lastUpdateText =
     latest && latest.created_at
       ? new Date(latest.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -80,10 +89,12 @@ export default function HomeScreen() {
     labelColor: (opacity = 1) => theme.chartLabel,
     fillShadowGradientFrom: COLORS.GOOD,
     fillShadowGradientTo: theme.chartBackground,
-    fillShadowGradientFromOpacity: 0.5,
+    fillShadowGradientFromOpacity: 0.35,
     fillShadowGradientToOpacity: 0.0,
-    propsForDots: { r: "3", strokeWidth: "1", stroke: COLORS.GOOD },
-    propsForBackgroundLines: { strokeDasharray: "", stroke: isDarkMode ? "#333" : "#eee" }, 
+    propsForDots: { r: "5", strokeWidth: "2", stroke: COLORS.GOOD, fill: theme.chartBackground },
+    propsForBackgroundLines: { strokeDasharray: "", stroke: isDarkMode ? "#2a2a2a" : "#eee" },
+    // Sol kenardaki etiketin kırpılmaması için x offset
+    paddingLeft: "16",
   };
 
   // --- RENDER ---
@@ -115,14 +126,13 @@ export default function HomeScreen() {
             <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
               <Text style={[styles.chartTitle, { color: theme.text }]}>Canlı kalite grafiği</Text>
               <Text style={[styles.chartCaption, { color: theme.subText }]}>
-                Çizgi, tahmini CO2 değerine göre hesaplanan{' '}
-                <Text style={{ fontWeight: '700', color: theme.text }}>hava kalitesi skorudur</Text>
-                {' '}(0–100).{'\n'}
-                Yukarı daha temiz, aşağı daha kirli ortam demektir. Veriler yaklaşık 10 saniyede bir yenilenir.
+                CO2'ye göre kalite skoru (0–100).
               </Text>
               {!chartHasRealPoints ? (
                 <Text style={[styles.chartEmpty, { color: theme.subText }]}>
-                  Grafik için sunucuda birkaç ardışık ölçüm birikmeli. Cihaz gönderiyorsa bir dakika içinde çizgi belirir.
+                  {validData.length > 0
+                    ? `Son veri: ${new Date(validData[0].created_at).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })} — cihaz şu an bağlı değil.`
+                    : 'Cihaz veri gönderince grafik belirir.'}
                 </Text>
               ) : (
               <ScrollView
@@ -139,11 +149,11 @@ export default function HomeScreen() {
                   segments={4}
                   yAxisSuffix=""
                   bezier
-                  withDots={chartDataPoints.length <= 12}
+                  withDots
                   withInnerLines={true}
                   withOuterLines={false}
                   withVerticalLines={false}
-                  style={{ marginVertical: 8, borderRadius: 16, paddingRight: 0, marginLeft: -10 }}
+                  style={{ marginVertical: 8, borderRadius: 16 }}
                 />
               </ScrollView>
               )}
@@ -182,8 +192,8 @@ export default function HomeScreen() {
                     <Text style={[styles.detailColumnTitle, { color: theme.subText }]}>
                       Organik gazlar (VOC indeksi)
                     </Text>
-                    <Text style={[styles.vocExplain, { color: theme.subText }]}>
-                      Düşük sayı = daha temiz hava (Sensirion tarzı ölçek).
+                    <Text style={[styles.chartCaption, { color: theme.subText }]}>
+                      Düşük = temiz hava.
                     </Text>
                   </View>
                   <View style={styles.detailValueColumn}>

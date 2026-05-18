@@ -44,7 +44,12 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
   const [phoneNotificationsEnabled, setPhoneNotificationsEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [deviceSerial, setDeviceSerial] = useState<string | null>(null);
   const lastAlertKeyRef = useRef<string>("");
+  const fetchDataRef = useRef<() => Promise<void>>();
+  const deviceSerialRef = useRef<string | null>(null);
+  // En son DB kaydının created_at değeri — değişmemişse state güncelleme yapma
+  const latestCreatedAtRef = useRef<string>("");
   const unreadCount = notifications.length;
   const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -59,62 +64,66 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  const handleAlert = async (reading: SensorData) => {
+    const status = reading.air_quality_status;
+    if (status !== "UNHEALTHY" && status !== "HAZARDOUS") return;
+    const alertKey = `${reading.created_at}-${status}`;
+    if (lastAlertKeyRef.current === alertKey) return;
+    lastAlertKeyRef.current = alertKey;
+    const label = status === "HAZARDOUS" ? "Tehlikeli" : "Sağlıksız";
+    const notif: Notification = {
+      id: alertKey,
+      title: `Hava Kalitesi ${label}`,
+      message: `CO2 ${reading.co2_ppm} ppm | VOC ${reading.voc_index}`,
+      received_at: new Date().toISOString(),
+    };
+    addAppNotification(notif);
+    if (phoneNotificationsEnabled && Platform.OS !== "web") {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: { title: notif.title, body: notif.message, sound: "default" },
+          trigger: null,
+        });
+      } catch (e) {
+        console.error("Telefon bildirimi gönderilemedi:", e);
+      }
+    }
+  };
+
   const fetchData = async () => {
     try {
-      console.log("[SensorContext] fetchData: istek atiliyor...");
-      const serial = await deviceService.getUserDeviceSerial();
+      // deviceSerial zaten biliniyorsa tekrar Supabase'e sorma
+      const serial = deviceSerialRef.current ?? await deviceService.getUserDeviceSerial();
       if (!serial) {
-        console.log("[SensorContext] fetchData: aktif kullanici/cihaz bulunamadi, fetch iptal edildi.");
         setHistory([]);
         setData(null);
         setLoading(false);
         return;
       }
-      const mappedHistory = await apiService.getHistory({
-        serialNumber: serial,
-        limit: 48,
-      });
-      console.log("[SensorContext] fetchData: gelen kayit sayisi=", mappedHistory.length);
+      if (deviceSerialRef.current !== serial) {
+        deviceSerialRef.current = serial;
+        setDeviceSerial(serial);
+      }
+      const mappedHistory = await apiService.getHistory({ serialNumber: serial, limit: 48 });
+
       if (mappedHistory.length > 0) {
-        setHistory(mappedHistory);
-        setData(mappedHistory[0]);
-
-        const latestReading = mappedHistory[0];
-        const latestStatus = latestReading.air_quality_status;
-        const shouldAlert = latestStatus === "UNHEALTHY" || latestStatus === "HAZARDOUS";
-        if (shouldAlert) {
-          const alertKey = `${latestReading.created_at}-${latestStatus}`;
-          if (lastAlertKeyRef.current !== alertKey) {
-            const alertLabel = latestStatus === "HAZARDOUS" ? "Tehlikeli" : "Sagliksiz";
-            const appNotification: Notification = {
-              id: alertKey,
-              title: `Hava Kalitesi ${alertLabel}`,
-              message: `CO2 ${latestReading.co2_ppm} ppm | VOC ${latestReading.voc_index}`,
-              received_at: new Date().toISOString(),
-            };
-            addAppNotification(appNotification);
-
-            if (phoneNotificationsEnabled && Platform.OS !== "web") {
-              try {
-                await Notifications.scheduleNotificationAsync({
-                  content: {
-                    title: appNotification.title,
-                    body: appNotification.message,
-                    sound: "default",
-                  },
-                  trigger: null,
-                });
-              } catch (notifError) {
-                console.error("Telefon bildirimi gönderilemedi:", notifError);
-              }
-            }
-            lastAlertKeyRef.current = alertKey;
-          }
+        const newestAt = mappedHistory[0].created_at;
+        if (newestAt !== latestCreatedAtRef.current) {
+          // Gerçekten yeni veri var — state güncelle ve logla
+          latestCreatedAtRef.current = newestAt;
+          console.log("[SensorContext] Yeni veri geldi:", newestAt, "| toplam:", mappedHistory.length);
+          setHistory(mappedHistory);
+          setData(mappedHistory[0]);
+          await handleAlert(mappedHistory[0]);
+        } else {
+          console.log("[SensorContext] Polling: yeni kayıt yok, state dokunulmadı.");
         }
       } else {
-        // Servisten bos liste donerse UI'nin stale veri gostermemesi icin state sifirlanir.
-        setHistory([]);
-        setData(null);
+        if (latestCreatedAtRef.current !== "") {
+          latestCreatedAtRef.current = "";
+          setHistory([]);
+          setData(null);
+        }
       }
       setLoading(false);
     } catch (error) {
@@ -123,30 +132,81 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Oturum durumunu takip et — login/logout'ta polling'i başlat/durdur
+  // fetchData referansını her render'da güncelle — interval'ın stale closure yakalamasını önle
+  fetchDataRef.current = fetchData;
+
+  // Oturum takibi
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsLoggedIn(!!session?.user);
     });
-    // İlk yüklemede mevcut oturumu kontrol et
     supabase.auth.getSession().then(({ data: { session } }) => {
       setIsLoggedIn(!!session?.user);
     });
     return () => subscription.unsubscribe();
   }, []);
 
+  // İlk yükleme + polling (10 sn yedek)
   useEffect(() => {
     if (!isLoggedIn) {
       setData(null);
       setHistory([]);
+      setDeviceSerial(null);
+      deviceSerialRef.current = null;
+      latestCreatedAtRef.current = "";
       setLoading(false);
       return;
     }
-
-    fetchData();
-    const interval: any = setInterval(fetchData, 10000);
+    fetchDataRef.current?.();
+    const interval = setInterval(() => fetchDataRef.current?.(), 10_000);
     return () => clearInterval(interval);
   }, [isLoggedIn]);
+
+  // Supabase Realtime — cihazın serial'ı belli olunca anlık INSERT dinle
+  useEffect(() => {
+    if (!isLoggedIn || !deviceSerial) return;
+
+    const channel = supabase
+      .channel(`realtime-sensor-${deviceSerial}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "sensor_readings",
+          filter: `device_serial=eq.${deviceSerial}`,
+        },
+        (payload) => {
+          const row = payload.new as any;
+          const mapped: SensorData = {
+            id: row.id,
+            temperature: Number(row.temperature ?? 0),
+            humidity: Number(row.humidity ?? 0),
+            co2_ppm: Number(row.co2_ppm ?? 0),
+            voc_index: Number(row.voc_index ?? 0),
+            air_quality_status: (row.air_quality_status ?? "UNKNOWN") as SensorData["air_quality_status"],
+            created_at: String(row.created_at ?? ""),
+          };
+          // Polling ile çakışmayı önle: sadece gerçekten yeni ise işle
+          if (mapped.created_at > latestCreatedAtRef.current) {
+            latestCreatedAtRef.current = mapped.created_at;
+            console.log("[Realtime] Anlık veri:", mapped.created_at, "co2:", mapped.co2_ppm);
+            setData(mapped);
+            setHistory((prev) =>
+              prev.some((d) => d.created_at === mapped.created_at)
+                ? prev
+                : [mapped, ...prev].slice(0, 48)
+            );
+            handleAlert(mapped);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("[Realtime] kanal durumu:", status);
+      });
+
+    return () => { supabase.removeChannel(channel); };
+  }, [isLoggedIn, deviceSerial]);
 
   const clearNotifications = () => {
     setNotifications([]);
