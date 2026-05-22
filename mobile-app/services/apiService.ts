@@ -94,9 +94,7 @@ const periodToSinceIso = (period?: string): string | null => {
 
 async function fetchDemoHistory(params: SensorHistoryParams): Promise<SensorData[]> {
   const limit = params.limit ?? 20;
-  const url = apiUrl(
-    `/demo/history?serial_number=${encodeURIComponent(params.serialNumber)}&limit=${limit}`
-  );
+  const url = `${BASE_URL}/demo/history?serial_number=${encodeURIComponent(params.serialNumber)}&limit=${limit}`;
   const response = await fetchWithTimeout(url, { method: "GET" });
   if (!response.ok) {
     throw new Error(`Demo history failed with status ${response.status}`);
@@ -144,6 +142,7 @@ export const apiService = {
   },
 
   async registerPushToken(token: string): Promise<void> {
+    if (DEMO_MODE) return;
     const headers = await authHeaders();
     const response = await fetchWithTimeout(REGISTER_TOKEN_URL, {
       method: "POST",
@@ -156,6 +155,7 @@ export const apiService = {
   },
 
   async unregisterPushToken(token: string): Promise<void> {
+    if (DEMO_MODE) return;
     const headers = await authHeaders();
     const response = await fetchWithTimeout(UNREGISTER_TOKEN_URL, {
       method: "POST",

@@ -16,7 +16,26 @@ from demo_store import DEMO_DEVICE_SERIAL, fetch_history, fetch_latest, init_dem
 
 load_dotenv()
 
-DEMO_MODE = os.getenv("AIRSENSE_DEMO_MODE", "").strip().lower() in ("1", "true", "yes")
+
+def _env_demo_flag() -> bool:
+    return os.getenv("AIRSENSE_DEMO_MODE", "").strip().lower() in ("1", "true", "yes")
+
+
+def _supabase_looks_like_placeholder(url: str, key: str) -> bool:
+    if not url.strip() or not key.strip():
+        return True
+    u = url.lower()
+    markers = (
+        "your_project_ref",
+        "<your-project-ref>",
+        "example.supabase",
+        "xxxx.supabase",
+        "replace",
+    )
+    return any(m in u for m in markers) or key.strip().endswith("...") or "<" in key
+
+
+DEMO_MODE = _env_demo_flag()
 
 app = FastAPI(title="AirSense API")
 
@@ -62,6 +81,10 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
 supabase: Optional[Client] = None
+if not DEMO_MODE and _supabase_looks_like_placeholder(SUPABASE_URL, SUPABASE_KEY):
+    DEMO_MODE = True
+    print("[DEMO] Supabase yapilandirmasi gecersiz — SQLite demo moduna gecildi.")
+
 if DEMO_MODE:
     init_demo_db()
     print(
@@ -75,10 +98,9 @@ elif SUPABASE_URL and SUPABASE_KEY:
     except Exception as e:
         print(f"Supabase baglanti hatasi: {e}")
 else:
-    print(
-        "Supabase yapilandirmasi eksik: SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY "
-        "ortam degiskenlerini ayarlayin veya AIRSENSE_DEMO_MODE=true kullanin."
-    )
+    DEMO_MODE = True
+    init_demo_db()
+    print("[DEMO] Supabase yapilandirmasi yok — SQLite demo modu acildi.")
 
 
 def require_supabase() -> Client:

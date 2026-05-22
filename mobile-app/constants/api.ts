@@ -14,7 +14,7 @@ const extra = Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined
  *
  * Hardcoded fallback BİLEREK kaldırıldı: LAN IP değiştiğinde mobil uygulamanın
  * sessizce eski IP'ye gitmesini önlemek için. .env eksikse uygulama açık
- * hata verir (ipucu: SECTORALPROJE.md).
+ * hata verir. Bkz. README-ZIP.md / SECTORALPROJE.md.
  */
 const resolved =
   process.env.EXPO_PUBLIC_API_BASE_URL || extra?.apiBaseUrl || "";

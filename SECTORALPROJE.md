@@ -1,6 +1,14 @@
 # AirSense IoT — Sektör Projesi: Hoca Kurulum Rehberi
 
-**İlk okuma (en sade anlatım):** [README.md](README.md) — Halit Ayanlı Hocam için adım adım demo kurulumu.
+**Zip kurulumu:** [README-ZIP.md](README-ZIP.md) · **Genel repo:** [README.md](README.md) (GitHub kökü)
+
+**Tam proje:** https://github.com/ArdaKaradag36/AirSense  
+**Web:** https://ardakaradag36.github.io/airsense-iot/  
+**İletişim:** WhatsApp 0541 413 6824
+
+**Hızlı yol — Linux:** `chmod +x *.sh` → `./1-KURULUM.sh` (sunucu otomatik) → `./3-TEST-CIHAZ.sh` + `./4-EXPO.sh` (Expo: **Proceed anonymously**).
+
+**Hızlı yol — Windows:** `1-KURULUM.bat` → `3-TEST-CIHAZ.bat` + `4-EXPO.bat`.
 
 Bu belge, **ESP32 veya USB donanımı olmadan** projeyi sıfırdan çalıştırmanız içindir. Simülasyon verisi `test_device.py` ile üretilir; mobil arayüz **Expo Go** ile telefonda açılır.
 
@@ -44,32 +52,39 @@ Telefonda:
 
 ## 2. Projeyi açın
 
-**Zip ile:** Dosyayı bir klasöre çıkarın (ör. `AirSense`).
+**Zip (hocaya gönderilen paket):**
 
-**Git ile:**
+| | |
+|--|--|
+| Dosya | `AirSense-hoca-demo-YYYYMMDD.zip` |
+| Çıkarınca klasör | `AirSense-hoca-demo-YYYYMMDD` (zip adıyla **aynı**, `.zip` yok) |
 
 ```bash
-git clone <repo-url>
-cd AirSense
+cd AirSense-hoca-demo-20260522
 ```
+
+*(Tarih sizdeki zip’e göre değişir; `cd AirSense` **kullanmayın** — repo adı değil, zip klasör adıdır.)*
+
+**Proje kökü** = içinde `README.md`, `backend/`, `mobile-app/` gördüğünüz klasör. Aşağıdaki tüm `cd backend` / `cd mobile-app` komutları buradan başlar.
+
+**Git ile (geliştirici):** `git clone …` sonrası kendi klasör adınızı kullanın.
 
 ---
 
-## 3. Demo modu kurulumu (önerilen — Supabase gerekmez)
+## 3. Demo modu kurulumu (Supabase gerekmez)
+
+**Önce proje kökünde olduğunuzu doğrulayın** (`ls` → `backend` ve `mobile-app` görünmeli).
 
 ### 3.1 Backend ortam dosyası
 
 ```bash
 cd backend
-cp .env.example .env
+cp demo.env.example .env
 ```
 
-`.env` dosyasını düzenleyin; **en az** şunlar olsun:
+**`cp .env.example .env` kullanmayın** — demo satırları yorumda kalır; Supabase placeholder DNS hatası verir.
 
-```env
-AIRSENSE_DEMO_MODE=true
-AIRSENSE_API_SECRET=demo-local-only-change-me
-```
+Sunucu logunda: `[DEMO] SQLite modu aktif` olmalı.
 
 `AIRSENSE_API_SECRET` değerini `test_device.py` ile aynı tutun (ikisi de bu dosyadan okunur).
 
@@ -84,7 +99,7 @@ chmod +x setup_venv.sh
 
 ```bash
 cd ../mobile-app
-cp .env.example .env
+cp demo.env.example .env
 ```
 
 `.env` içinde:
@@ -133,11 +148,17 @@ npx expo start -c
 
 ## 5. Üç terminalde çalıştırma
 
+Her yeni terminalde önce **proje köküne** gidin, sonra alt klasör:
+
+```bash
+cd /tam/yol/AirSense-hoca-demo-YYYYMMDD
+```
+
 ### Terminal 1 — API sunucusu
 
 ```bash
 cd backend
-source .venv/bin/activate
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -149,7 +170,7 @@ Tarayıcıda test: `http://127.0.0.1:8000/docs`
 
 ```bash
 cd backend
-source .venv/bin/activate
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
 python test_device.py
 ```
 
@@ -186,6 +207,10 @@ Terminalde **QR kod** görünür.
 
 | Belirti | Olası çözüm |
 |---------|-------------|
+| `cd AirSense` hata | Zip klasörü `AirSense-hoca-demo-…` — onu kullanın |
+| `mobile-app` yok | Yanlış dizin veya çift iç içe zip; `ls` ile kökü bulun |
+| `Supabase baglantisi` + 500 | `cp demo.env.example .env` (backend); uvicorn yeniden |
+| Expo `package.json` yok | `cd mobile-app` sonra `npx expo start -c` |
 | Mobilde veri yok | `test_device.py` çalışıyor mu? IP doğru mu? |
 | `API_BASE_URL tanımsız` | `mobile-app/.env` oluşturuldu mu? Expo `-c` ile yeniden başlatıldı mı? |
 | `401` / API key | `backend/.env` ve `test_device` aynı `AIRSENSE_API_SECRET` |
@@ -197,14 +222,7 @@ Terminalde **QR kod** görünür.
 
 ## 8. Bölüm B — Tam sistem (Supabase + kayıt)
 
-Demo modu yerine gerçek bulut veritabanı kullanmak için:
-
-1. `AIRSENSE_DEMO_MODE` ve `EXPO_PUBLIC_DEMO_MODE` satırlarını kaldırın veya `false` yapın.
-2. Öğrenciden **`HOCA_ENV.example.txt`** şablonuna uygun dolu bir dosya isteyin (WhatsApp/e-posta — repoda **gönderilmez**).
-3. İçeriği `backend/.env` ve `mobile-app/.env` dosyalarına bölün.
-4. Uygulama akışı: seri numarası `AIRSENSE-PRO-001` → kayıt → giriş.
-
-Şablon: [`HOCA_ENV.example.txt`](HOCA_ENV.example.txt)
+Demo modu yerine üretim kurulumu için `backend/.env.example` ve `mobile-app/.env.example` dosyalarından `.env` oluşturun; `AIRSENSE_DEMO_MODE` satırlarını kullanmayın. Supabase Dashboard’dan URL ve anahtarları girin.
 
 ---
 
@@ -225,11 +243,14 @@ Bu demo paketinde **ESP32, USB kablo veya ngrok zorunlu değildir**. Donanım ka
 ## Hızlı komut özeti
 
 ```bash
-# Kurulum (bir kez)
-cd backend && cp .env.example .env && ./setup_venv.sh
-cd ../mobile-app && cp .env.example .env && npm install
+# 0) Proje kökü (zip’ten çıkan klasör)
+cd AirSense-hoca-demo-YYYYMMDD
 
-# Çalıştırma (her seferinde — 3 ayrı terminal)
+# Kurulum (bir kez, kökten)
+cd backend && cp demo.env.example .env && ./setup_venv.sh
+cd ../mobile-app && cp demo.env.example .env && npm install
+
+# Çalıştırma (3 terminal — her birinde önce köke cd, sonra:)
 cd backend && source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
 cd backend && source .venv/bin/activate && python test_device.py
 cd mobile-app && npx expo start -c

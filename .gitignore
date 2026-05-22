@@ -31,6 +31,6 @@ READMEFOLDER/
 # Personal / demo artifacts
 backend/arda.txt
 backend/data/
+.hoca-sunucu.pid
+logs/
 *.zip
-HOCA_ENV.txt
-.env.hoca

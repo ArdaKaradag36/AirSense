@@ -5,6 +5,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { DEMO_MODE } from '../constants/demo';
 import { apiService } from '../services/apiService';
 
 // Bildirim davranış ayarları
@@ -65,8 +66,8 @@ export const usePushNotifications = () => {
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>('');
 
   useEffect(() => {
-    // 🛑 WEB KONTROLÜ EKLENDİ: Tarayıcıda token almaya çalışma
     if (Platform.OS === 'web') return;
+    if (DEMO_MODE) return;
 
     registerForPushNotificationsAsync().then(token => {
       setExpoPushToken(token);
