@@ -194,7 +194,14 @@ def send_push_notification(expo_token: str, title: str, body: str) -> None:
 # 1. Cihazdan Veri Alma — x-api-key ile korunur (cihaz kimlik dogrulamasi)
 @app.post("/api/v1/data")
 def receive_data(data: SensorData, x_api_key: str = Header(None)):
-    if not x_api_key or x_api_key != API_SECRET:
+    if not x_api_key:
+        print("[/api/v1/data] 401 - x-api-key header eksik")
+        raise HTTPException(status_code=401, detail="Yetkisiz Erisim: x-api-key header eksik")
+    if x_api_key != API_SECRET:
+        print(
+            f"[/api/v1/data] 401 - API key uyusmuyor "
+            f"(gelen len={len(x_api_key)}, beklenen len={len(API_SECRET)})"
+        )
         raise HTTPException(status_code=401, detail="Yetkisiz Erisim: Yanlis API Key")
 
     voc_store = data.voc_index
@@ -221,7 +228,14 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
 
     db = require_supabase()
     try:
-        db.table("sensor_readings").insert(kayit).execute()
+        result = db.table("sensor_readings").insert(kayit).execute()
+        inserted = result.data[0] if result.data else None
+        print(
+            f"[INSERT OK] serial={data.serial_number} "
+            f"T={data.temperature}°C H={data.humidity}% "
+            f"MQ135={data.mq135_value} CO2={co2_store} VOC={voc_store} "
+            f"status={status} id={inserted.get('id') if inserted else '?'}"
+        )
 
         if is_alert:
             print(f"!!! ACIL DURUM: {data.serial_number} cihazinda seviye HAZARDOUS!")
@@ -240,7 +254,7 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
 
         return {"status": "success", "message": "Data recorded successfully."}
     except Exception as e:
-        print(f"Sistem Hatasi: {e}")
+        print(f"[INSERT FAIL] serial={data.serial_number} hata: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

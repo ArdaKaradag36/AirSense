@@ -14,9 +14,25 @@
 #define MQ135_PIN   34
 #define BUZZER_PIN  13
 
+// Durum LED'leri (Aktif HIGH)
+#define LED_GOOD_PIN       2    // Yesil  - GOOD
+#define LED_MODERATE_PIN   17   // Mavi   - MODERATE
+#define LED_UNHEALTHY_PIN  5    // Sari   - UNHEALTHY
+#define LED_HAZARDOUS_PIN  15   // Kirmizi- HAZARDOUS
+
 // --- KALIBRASYON ---
 constexpr float SICAKLIK_SAPMASI = 5.0f;
-constexpr int   GAZ_ESIK         = 1200;
+constexpr int   GAZ_ESIK         = 1200;  // HAZARDOUS esigi (buzzer + kirmizi LED)
+
+// --- HAVA KALITESI ESIK DEGERLERI (MQ-135 ham ADC) ---
+// NOT: Bu esikler backend/main.py icindeki calculate_status() ile BIREBIR ayni olmalidir.
+//   mq < 600   -> GOOD       (Yesil LED)
+//   mq < 900   -> MODERATE   (Mavi LED)
+//   mq < 1200  -> UNHEALTHY  (Sari LED)
+//   mq >= 1200 -> HAZARDOUS  (Kirmizi LED + buzzer)
+constexpr int ESIK_GOOD_MAX      = 600;
+constexpr int ESIK_MODERATE_MAX  = 900;
+constexpr int ESIK_UNHEALTHY_MAX = 1200;
 
 // --- ZAMANLAMA (non-blocking) ---
 constexpr unsigned long OLCUM_ARALIK_MS  = 10000UL;  // 10 sn — delay() kullanilmiyor
@@ -68,6 +84,30 @@ void wifiBaglan() {
 }
 
 // -------------------------------------------------------
+// YARDIMCI: Hava kalitesi durum LED'lerini guncelle
+// MQ-135 ham ADC degerine gore SADECE tek LED yanar; digerleri soner.
+// Esikler backend/main.py -> calculate_status() ile paraleldir.
+// -------------------------------------------------------
+void updateStatusLEDs(int sensorValue) {
+  // Once hepsini kapat (race kosulu olmasin)
+  digitalWrite(LED_GOOD_PIN,      LOW);
+  digitalWrite(LED_MODERATE_PIN,  LOW);
+  digitalWrite(LED_UNHEALTHY_PIN, LOW);
+  digitalWrite(LED_HAZARDOUS_PIN, LOW);
+
+  // Tek bir durum LED'ini yak
+  if (sensorValue < ESIK_GOOD_MAX) {
+    digitalWrite(LED_GOOD_PIN, HIGH);          // GOOD       (mq < 600)
+  } else if (sensorValue < ESIK_MODERATE_MAX) {
+    digitalWrite(LED_MODERATE_PIN, HIGH);      // MODERATE   (600 <= mq < 900)
+  } else if (sensorValue < ESIK_UNHEALTHY_MAX) {
+    digitalWrite(LED_UNHEALTHY_PIN, HIGH);     // UNHEALTHY  (900 <= mq < 1200)
+  } else {
+    digitalWrite(LED_HAZARDOUS_PIN, HIGH);     // HAZARDOUS  (mq >= 1200)
+  }
+}
+
+// -------------------------------------------------------
 // YARDIMCI: Sensor olusumu gonder
 // -------------------------------------------------------
 void httpGonder(const String& jsonVerisi) {
@@ -98,6 +138,16 @@ void setup() {
   dht.begin();
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
+
+  // Durum LED'leri: OUTPUT + baslangicta hepsi KAPALI
+  pinMode(LED_GOOD_PIN,      OUTPUT);
+  pinMode(LED_MODERATE_PIN,  OUTPUT);
+  pinMode(LED_UNHEALTHY_PIN, OUTPUT);
+  pinMode(LED_HAZARDOUS_PIN, OUTPUT);
+  digitalWrite(LED_GOOD_PIN,      LOW);
+  digitalWrite(LED_MODERATE_PIN,  LOW);
+  digitalWrite(LED_UNHEALTHY_PIN, LOW);
+  digitalWrite(LED_HAZARDOUS_PIN, LOW);
 
   // Server URL'yi runtime'da bir kez olustur
   serverUrl = String("http://") + SERVER_HOST + ":" + SERVER_PORT + "/api/v1/data";
@@ -147,6 +197,9 @@ void loop() {
       nem = 0.0f;
       ham_sicaklik = 0.0f;
     }
+
+    // --- DURUM LED'LERI (her okumada guncellenir) ---
+    updateStatusLEDs(ham_gaz);
 
     // --- ALARM MANTIĞI ---
     bool tehlike = (ham_gaz > GAZ_ESIK);
