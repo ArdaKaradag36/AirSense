@@ -2,6 +2,9 @@
 
 import os
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 import random
 import time
 from datetime import datetime
@@ -15,8 +18,13 @@ API_URL = os.environ.get(
 TEST_DEVICE_SERIAL = "AIRSENSE-PRO-001" 
 
 # --- GÜVENLİK ANAHTARI ---
-# main.py dosyasındaki API_SECRET ile birebir aynı olmalı
-API_KEY = "airsense-2025-secure-key-v1"
+# backend/.env icindeki AIRSENSE_API_SECRET ile ayni olmali
+API_KEY = os.environ.get("AIRSENSE_API_SECRET", "").strip()
+if not API_KEY:
+    raise RuntimeError(
+        "AIRSENSE_API_SECRET tanimli degil. backend/.env dosyasina ekleyin "
+        "veya: AIRSENSE_API_SECRET=... python test_device.py"
+    )
 
 state = {
     "temperature": 24.0,

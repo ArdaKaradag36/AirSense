@@ -24,3 +24,13 @@ venv/
 .idea/
 .cursor/
 *.log
+
+# Internal docs (not for public repo / professor zip)
+READMEFOLDER/
+
+# Personal / demo artifacts
+backend/arda.txt
+backend/data/
+*.zip
+HOCA_ENV.txt
+.env.hoca

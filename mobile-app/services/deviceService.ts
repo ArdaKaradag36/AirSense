@@ -1,3 +1,4 @@
+import { DEMO_DEVICE_SERIAL, DEMO_MODE } from "../constants/demo";
 import { isSupabaseConfigured, safeStorage, supabase } from "./supabaseClient";
 
 export const PENDING_DEVICE_SERIAL_KEY = "pending_device_serial";
@@ -9,6 +10,7 @@ export const PENDING_DEVICE_SERIAL_KEY = "pending_device_serial";
  */
 export const deviceService = {
   ensureConfig() {
+    if (DEMO_MODE) return;
     if (!isSupabaseConfigured) {
       throw new Error(
         "Supabase ayarlari eksik. Cihaz dogrulamasi icin `.env` icindeki Supabase URL ve anon key degerlerini tamamlayin."
@@ -36,6 +38,9 @@ export const deviceService = {
   async verifyUnclaimedDevice(serialNumber: string): Promise<boolean> {
     this.ensureConfig();
     const normalized = serialNumber.trim().toUpperCase();
+    if (DEMO_MODE) {
+      return normalized === DEMO_DEVICE_SERIAL;
+    }
     console.log("[deviceService] verifyUnclaimedDevice:", normalized);
     if (!normalized) return false;
 
@@ -125,6 +130,7 @@ export const deviceService = {
 
   async getDeviceSerialForUserId(userId: string): Promise<string | null> {
     this.ensureConfig();
+    if (DEMO_MODE) return DEMO_DEVICE_SERIAL;
     if (!userId) return null;
     const { data, error } = await supabase
       .from("devices")
@@ -144,6 +150,7 @@ export const deviceService = {
 
   async getUserDeviceSerial(): Promise<string | null> {
     this.ensureConfig();
+    if (DEMO_MODE) return DEMO_DEVICE_SERIAL;
     /* Giriş anında JWT henüz yazılmışken getUser() ara ara "session missing"
        verebiliyor; önce bellek içi session kullan */
     const sessionUser = (await supabase.auth.getSession()).data.session?.user ?? null;

@@ -11,6 +11,8 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
+import { DEMO_MODE } from "../constants/demo";
+import { useAuth } from "./AuthContext";
 import { apiService } from "../services/apiService";
 import { deviceService } from "../services/deviceService";
 import { Notification, SensorData } from "../types/sensor.types";
@@ -57,6 +59,7 @@ const POLL_INTERVAL_SLOW_MS = 30_000;
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const SensorProvider = ({ children }: { children: ReactNode }) => {
+  const { user: authUser } = useAuth();
   const [data, setData] = useState<SensorData | null>(null);
   const [history, setHistory] = useState<SensorData[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -181,6 +184,10 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
   }, [fetchData]);
 
   useEffect(() => {
+    if (DEMO_MODE) {
+      setIsLoggedIn(!!authUser);
+      return;
+    }
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -190,7 +197,7 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
       setIsLoggedIn(!!session?.user);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [authUser]);
 
   // Oturum acilinca / kapaninca state'i resetle ve ilk fetch'i tetikle
   useEffect(() => {
@@ -219,8 +226,12 @@ export const SensorProvider = ({ children }: { children: ReactNode }) => {
     return () => clearInterval(id);
   }, [isLoggedIn, realtimeStatus]);
 
-  // Supabase Realtime
+  // Supabase Realtime (demo modunda kapali — yalnizca polling)
   useEffect(() => {
+    if (DEMO_MODE) {
+      setRealtimeStatus("IDLE");
+      return;
+    }
     if (!isLoggedIn || !deviceSerial) {
       setRealtimeStatus("IDLE");
       return;

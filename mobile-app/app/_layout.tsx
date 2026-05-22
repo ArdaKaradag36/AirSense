@@ -12,6 +12,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SensorProvider } from '../context/SensorContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { DEMO_MODE } from '../constants/demo';
 import { authService } from '../services/authService';
 import { deviceService } from '../services/deviceService';
 
@@ -105,6 +106,9 @@ function AppNavigator() {
 
     if (!user) {
       console.log('[AppNavigator] user null -> login yonlendirmesi');
+      if (DEMO_MODE) {
+        return;
+      }
       if (prevId !== null) {
         router.replace('/(auth)/login');
       }

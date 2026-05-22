@@ -1,0 +1,21 @@
+AirSense IoT
+Copyright (c) 2026 Arda Karadağ
+
+This product includes software developed under the MIT License.
+See LICENSE for the full license text.
+
+Third-party components include, without limitation:
+
+  - Expo SDK and React Native (Expo / Meta)
+  - FastAPI, Uvicorn, Pydantic, python-dotenv, requests, pyserial
+  - @supabase/supabase-js and supabase-py
+  - PlatformIO / Arduino framework (hardware subtree)
+
+Demo mode uses Python standard library sqlite3 for local evaluation only;
+it does not replace production Supabase security controls.
+
+CONFIDENTIAL VALUES (never commit or ship in client bundles):
+
+  - AIRSENSE_API_SECRET
+  - SUPABASE_SERVICE_ROLE_KEY
+  - Private Expo or Supabase credentials beyond EXPO_PUBLIC_* anon keys

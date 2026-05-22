@@ -12,7 +12,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from supabase import Client, create_client
 
+from demo_store import DEMO_DEVICE_SERIAL, fetch_history, fetch_latest, init_demo_db, insert_reading
+
 load_dotenv()
+
+DEMO_MODE = os.getenv("AIRSENSE_DEMO_MODE", "").strip().lower() in ("1", "true", "yes")
 
 app = FastAPI(title="AirSense API")
 
@@ -58,7 +62,13 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
 supabase: Optional[Client] = None
-if SUPABASE_URL and SUPABASE_KEY:
+if DEMO_MODE:
+    init_demo_db()
+    print(
+        f"[DEMO] SQLite modu aktif ({DEMO_DEVICE_SERIAL}). "
+        "Supabase zorunlu degil; mobil EXPO_PUBLIC_DEMO_MODE=true kullanin."
+    )
+elif SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         print("Supabase baglantisi basariyla kuruldu.")
@@ -67,11 +77,16 @@ if SUPABASE_URL and SUPABASE_KEY:
 else:
     print(
         "Supabase yapilandirmasi eksik: SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY "
-        "ortam degiskenlerini ayarlayin."
+        "ortam degiskenlerini ayarlayin veya AIRSENSE_DEMO_MODE=true kullanin."
     )
 
 
 def require_supabase() -> Client:
+    if DEMO_MODE:
+        raise HTTPException(
+            status_code=503,
+            detail="Bu endpoint demo modunda kullanilmaz. Supabase modu icin AIRSENSE_DEMO_MODE=false yapin.",
+        )
     if supabase is None:
         raise HTTPException(
             status_code=503,
@@ -226,36 +241,68 @@ def receive_data(data: SensorData, x_api_key: str = Header(None)):
         "is_alert": is_alert,
     }
 
-    db = require_supabase()
     try:
-        result = db.table("sensor_readings").insert(kayit).execute()
-        inserted = result.data[0] if result.data else None
-        print(
-            f"[INSERT OK] serial={data.serial_number} "
-            f"T={data.temperature}°C H={data.humidity}% "
-            f"MQ135={data.mq135_value} CO2={co2_store} VOC={voc_store} "
-            f"status={status} id={inserted.get('id') if inserted else '?'}"
-        )
+        if DEMO_MODE:
+            inserted = insert_reading(kayit)
+            print(
+                f"[DEMO INSERT OK] serial={data.serial_number} "
+                f"T={data.temperature}°C H={data.humidity}% "
+                f"CO2={co2_store} VOC={voc_store} status={status} id={inserted.get('id')}"
+            )
+        else:
+            db = require_supabase()
+            result = db.table("sensor_readings").insert(kayit).execute()
+            inserted = result.data[0] if result.data else None
+            print(
+                f"[INSERT OK] serial={data.serial_number} "
+                f"T={data.temperature}°C H={data.humidity}% "
+                f"MQ135={data.mq135_value} CO2={co2_store} VOC={voc_store} "
+                f"status={status} id={inserted.get('id') if inserted else '?'}"
+            )
 
-        if is_alert:
-            print(f"!!! ACIL DURUM: {data.serial_number} cihazinda seviye HAZARDOUS!")
-            users_response = db.table("mobile_clients").select("expo_token").execute()
-            if users_response.data:
-                for user in users_response.data:
-                    if isinstance(user, dict):
-                        token = user.get("expo_token")
-                        if token and isinstance(token, str):
-                            send_push_notification(
-                                expo_token=token,
-                                title="HAVA KALİTESİ UYARISI!",
-                                body=f"Ortamdaki VOC seviyesi tehlikeli sinira ulasti. (VOC Index: {voc_store})",
-                            )
-                            print(f"-> Bildirim gonderildi: {token[:15]}...")
+            if is_alert:
+                print(f"!!! ACIL DURUM: {data.serial_number} cihazinda seviye HAZARDOUS!")
+                users_response = db.table("mobile_clients").select("expo_token").execute()
+                if users_response.data:
+                    for user in users_response.data:
+                        if isinstance(user, dict):
+                            token = user.get("expo_token")
+                            if token and isinstance(token, str):
+                                send_push_notification(
+                                    expo_token=token,
+                                    title="HAVA KALİTESİ UYARISI!",
+                                    body=f"Ortamdaki VOC seviyesi tehlikeli sinira ulasti. (VOC Index: {voc_store})",
+                                )
+                                print(f"-> Bildirim gonderildi: {token[:15]}...")
 
         return {"status": "success", "message": "Data recorded successfully."}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[INSERT FAIL] serial={data.serial_number} hata: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Demo mobil okuma — JWT yok (yalnizca AIRSENSE_DEMO_MODE=true)
+@app.get("/api/v1/demo/history")
+def demo_history(serial_number: str, limit: int = 48):
+    if not DEMO_MODE:
+        raise HTTPException(status_code=404, detail="Demo modu kapali.")
+    try:
+        return fetch_history(serial_number, limit=limit)
+    except Exception as e:
+        print(f"[DEMO] history hata: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch demo data.")
+
+
+@app.get("/api/v1/demo/latest")
+def demo_latest(serial_number: str):
+    if not DEMO_MODE:
+        raise HTTPException(status_code=404, detail="Demo modu kapali.")
+    row = fetch_latest(serial_number)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Kayit bulunamadi.")
+    return row
 
 
 # 2. Mobil Veri Cekme — Supabase JWT zorunludur

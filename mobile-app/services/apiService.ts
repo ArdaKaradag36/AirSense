@@ -1,4 +1,5 @@
-import { API_BASE_URL } from "../constants/api";
+import { apiUrl } from "../constants/api";
+import { DEMO_MODE } from "../constants/demo";
 import { supabase } from "./supabaseClient";
 import { AirQualityStatus, SensorData, SensorHistoryParams } from "../types/sensor.types";
 
@@ -23,7 +24,7 @@ const toAirQualityStatus = (value: unknown): AirQualityStatus => {
  * UI ve Context katmanları "hangi protokol" (HTTP/MQTT) veya "hangi backend" (Supabase/TimescaleDB)
  * kullanıldığını bilmez; sadece bu servis fonksiyonlarını çağırır.
  */
-const BASE_URL = `${API_BASE_URL}/api/v1`;
+const BASE_URL = apiUrl("/api/v1");
 
 const DEFAULT_FETCH_MS = 20_000;
 
@@ -91,9 +92,30 @@ const periodToSinceIso = (period?: string): string | null => {
   return new Date(now - ms).toISOString();
 };
 
+async function fetchDemoHistory(params: SensorHistoryParams): Promise<SensorData[]> {
+  const limit = params.limit ?? 20;
+  const url = apiUrl(
+    `/demo/history?serial_number=${encodeURIComponent(params.serialNumber)}&limit=${limit}`
+  );
+  const response = await fetchWithTimeout(url, { method: "GET" });
+  if (!response.ok) {
+    throw new Error(`Demo history failed with status ${response.status}`);
+  }
+  const data = await response.json();
+  let items = (Array.isArray(data) ? data : []).map(mapSensorData);
+  const since = periodToSinceIso(params.period);
+  if (since) {
+    items = items.filter((item) => item.created_at >= since);
+  }
+  return items;
+}
+
 export const apiService = {
-  /** Sensör geçmişi — doğrudan Supabase (RLS); telefon LAN API’sine bağlı değil. */
+  /** Sensör geçmişi — demo: FastAPI SQLite; prod: Supabase RLS. */
   async getHistory(params: SensorHistoryParams): Promise<SensorData[]> {
+    if (DEMO_MODE) {
+      return fetchDemoHistory(params);
+    }
     const limit = params.limit ?? 20;
     let query = supabase
       .from("sensor_readings")

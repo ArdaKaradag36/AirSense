@@ -1,9 +1,12 @@
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { DEMO_MODE } from "../constants/demo";
 import { authService } from "../services/authService";
 import { deviceService } from "../services/deviceService";
 import { safeStorage, supabase } from "../services/supabaseClient";
+
+const DEMO_USER_ID = "00000000-0000-4000-8000-000000000099";
 
 interface AuthContextType {
   loading: boolean;
@@ -38,6 +41,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let unsubscribe: (() => void) | null = null;
 
     const bootstrap = async () => {
+      if (DEMO_MODE) {
+        const demoUser = {
+          id: DEMO_USER_ID,
+          email: "demo@airsense.local",
+          app_metadata: {},
+          user_metadata: { full_name: "Demo Kullanici" },
+          aud: "authenticated",
+          created_at: new Date().toISOString(),
+        } as User;
+        setUser(demoUser);
+        setSession(null);
+        setLoading(false);
+        setInitializing(false);
+        console.log("[AuthContext] DEMO_MODE: oturum atlandi, demo kullanici aktif");
+        return;
+      }
       try {
         const currentSession = await authService.getCurrentSession();
         console.log("[AuthContext] bootstrap: session=", currentSession?.user?.id ?? "yok");
@@ -55,6 +74,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     bootstrap();
+
+    if (DEMO_MODE) {
+      return () => {
+        isMounted = false;
+      };
+    }
 
     try {
       const subscription = authService.onAuthStateChange((nextSession, event) => {
